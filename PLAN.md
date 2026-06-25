@@ -70,7 +70,7 @@ Goal: a clean repo, git initialized, Postgres running locally, both apps booting
 endpoint. No AI yet. Sets the table so Phase 1 can go straight to the vertical slice.
 
 - [x] **0.1** `git init` + root `.gitignore` (Python, Node, `.env`, `__pycache__`, `.next/`, etc.) + empty `README.md` stub.
-- [ ] **0.2** `docker-compose.yml` with a Postgres service only (named volume, exposed port, healthcheck). 🎓 design: why Postgres-as-"existing-system".
+- [x] **0.2** `docker-compose.yml` with a Postgres service only (named volume, exposed port, healthcheck). 🎓 design: why Postgres-as-"existing-system".
 - [ ] **0.3** Backend skeleton with **Poetry**: `poetry init`/`pyproject.toml` (`fastapi`, `uvicorn`) + `app/main.py` exposing `GET /health`. 🎓 tooling: Poetry via npm analogies (pyproject≈package.json, lock file, `poetry add`/`install`/`run`). 🎓 async: first `async def` endpoint, why it's async.
 - [ ] **0.4** Backend `core/config.py` — Pydantic `Settings` reading `.env` (DB URL, will hold API key/OpenAI key later) + `.env.example`.
 - [ ] **0.5** Frontend skeleton: `create-next-app` (Next 16, TS, Tailwind, App Router) in `frontend/`, then init **shadcn/ui** + add a few base components we'll need (button, input, card, collapsible, table). Default page boots. Verify installed Next version vs package.json.
