@@ -46,10 +46,12 @@ abstraction** — no patterns for the sake of patterns. Clean and simple beats c
   bare `pip`+`venv`). He knows npm well, so lead with npm analogies: `pyproject.toml` ≈ `package.json`,
   `poetry.lock` ≈ `package-lock.json`, `poetry add` ≈ `npm install <pkg>`, `poetry install` ≈ `npm ci`,
   `poetry run <cmd>` ≈ `npx <cmd>`. Poetry creates/manages the virtualenv for him (no manual activate).
-- **Databases / SQL: his weakest area — treat as near-baseline, go slow.** He has *theoretical* bits
-  (knows roughly what a foreign key is) but has **never designed a schema from scratch, never managed
-  relationships, never written a non-trivial query, never run migrations.** What he most needs help
-  with, in order:
+- **Relational-DB *practice* is his weak area — go slow there.** He is **comfortable with basic SQL**
+  (`SELECT`/`FROM`/`WHERE`/`LIMIT`, can read non-complex queries); the gap is **hands-on relational-DB
+  work**, which he has only *theoretical* knowledge of: he has **never designed a schema from scratch,
+  never managed relationships, never written a non-trivial query (JOIN/GROUP BY), never used indexes,
+  never run migrations.** Don't re-teach basic query syntax from zero; lead with modeling/relationship
+  reasoning. What he most needs help with, in order:
   1. **The big picture / mental model first** — what does this factory *make*, what is a production
      line, what is a work order, what is downtime — so he can *picture* the domain before any SQL.
   2. **What each table means** and why it exists.
