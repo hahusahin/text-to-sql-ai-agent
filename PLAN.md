@@ -91,7 +91,7 @@ where most of the SQL teaching happens.
 - [x] **1.3** Migration: core "catalog" tables — `products`, `production_lines`, `machines`, `shifts`. 🎓 SQL: PK, column types, `machines.line_id` as first **foreign key**.
 - [x] **1.4** Migration: `work_orders` (FKs → products, lines, shifts) + `production_output` (FK → work_orders). 🎓 SQL: one-to-many, FK constraints, the production backbone.
 - [x] **1.5** Migration: `downtime_events` (FKs → lines, machines, shifts; `is_planned`, `duration_minutes`, `occurred_at`). 🎓 SQL: boolean + timestamp columns, reason_code as a small fixed set.
-- [ ] **1.6** Migration: `quality_inspections` (FK → work_orders) + `defects` (FK → inspections). 🎓 SQL: how quality "hangs off" production; the chain work_order → inspection → defect.
+- [x] **1.6** Migration: `quality_inspections` (FK → work_orders) + `defects` (FK → inspections). 🎓 SQL: how quality "hangs off" production; the chain work_order → inspection → defect.
 - [ ] **1.7** Migration: indexes on FK/time columns used by eval questions. 🎓 SQL: what an index is, why FK + `occurred_at`/`start_date` columns.
 - [ ] **1.8** Seed generator (Python script in `db/seed/`): catalog rows + ~12 months of work orders/output/downtime/inspections/defects. 🎓 design: internal consistency rules (scrap≤produced, passed≤inspected, valid FKs, planned/reason_code coherence).
 - [ ] **1.9** Run + sanity-check seed: a few manual `SELECT`/`JOIN` queries to eyeball realism. 🎓 SQL: your first hand-written `JOIN` + `GROUP BY` on our real data.
