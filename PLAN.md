@@ -86,7 +86,7 @@ where most of the SQL teaching happens.
 
 ### 1A — The database (mental model → schema → migrations → seed)
 
-- [ ] **1.1** 🎓 SQL (big picture): write `db/README.md` mental-model doc — what the factory makes, line/machine/shift/work_order/output/downtime/inspection/defect and how they connect. (Doc only, no SQL yet — you read it before we write a single table.)
+- [x] **1.1** 🎓 SQL (big picture): write `db/README.md` mental-model doc — what the factory makes, line/machine/shift/work_order/output/downtime/inspection/defect and how they connect. (Doc only, no SQL yet — you read it before we write a single table.)
 - [ ] **1.2** **Alembic** setup: `alembic init`, point `env.py` at our DB, write the **first hand-written migration** (raw `CREATE TABLE` via `op.execute`, no ORM models). 🎓 SQL: what a migration is, why versioned; 🎓 tooling: `upgrade`/`downgrade`, the version chain.
 - [ ] **1.3** Migration: core "catalog" tables — `products`, `production_lines`, `machines`, `shifts`. 🎓 SQL: PK, column types, `machines.line_id` as first **foreign key**.
 - [ ] **1.4** Migration: `work_orders` (FKs → products, lines, shifts) + `production_output` (FK → work_orders). 🎓 SQL: one-to-many, FK constraints, the production backbone.
