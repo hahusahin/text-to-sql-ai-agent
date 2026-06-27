@@ -99,7 +99,7 @@ where most of the SQL teaching happens.
 ### 1B — The non-agentic vertical slice
 
 - [x] **1.10** Pydantic models: `ChatRequest { question }`, `ChatResponse { answer, sql, rows }` in `app/models/`. 🎓 design: typed contract between layers.
-- [ ] **1.11** Repository: async DB connection pool with **asyncpg** + `run_query(sql) -> rows`. 🎓 async: what an async driver is & why (I/O-bound, `await`, connection pool); 🎓 design: repository behind an interface.
+- [x] **1.11** Repository: async DB connection pool with **asyncpg** + `run_query(sql) -> rows`. 🎓 async: what an async driver is & why (I/O-bound, `await`, connection pool); 🎓 design: repository behind an interface.
 - [ ] **1.12** Hardcoded schema text helper (`get_schema_text()` returns the table/column list as a string) — Phase 1 reads it from a constant/file, not live introspection yet.
 - [ ] **1.13** OpenAI client wrapper in `app/llm/` (pick current cheap mini/nano model from live docs/pricing together; Responses vs Chat Completions decided here). Get OpenAI key into `.env`. 🎓 SDK: the call, messages, what it returns.
 - [ ] **1.14** Service: `answer_question()` — build prompt (schema + question) → one LLM call → extract SQL → `run_query` → second LLM call to summarize rows → return `ChatResponse`. 🎓 design: this is the *non-agentic* one-shot; name why it's fragile (no self-correction).
