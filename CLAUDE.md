@@ -81,6 +81,10 @@ abstraction** — no patterns for the sake of patterns. Clean and simple beats c
   **ask whether he wants to move on to the next task** (don't auto-introduce it — he often continues
   in a new session, so let him decide when to start the next one). Only introduce the next task (what
   it is, why, how) if he says yes.**
+- **One commit per task — fold the bookkeeping into it.** The PLAN.md `[x]` tick (and any small doc
+  updates that belong to the task) go in the **same** commit as that task's code. **Do NOT create a
+  separate commit just to tick PLAN.md or tweak docs.** A standalone docs/plan commit is only OK when
+  the task itself is doc-only (e.g. writing a README).
 - **Never commit or mark a task done without his explicit approval.** Wait for it.
 - **He never commits manually.** Once he approves, you run `git commit` with a descriptive message.
 - **Commit attribution:** commits are authored under **his** git identity only. Do **NOT** add a
