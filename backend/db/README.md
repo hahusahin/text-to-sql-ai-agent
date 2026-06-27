@@ -1,7 +1,8 @@
 # The Database — Mental Model
 
-Read this **before** we write a single `CREATE TABLE`. The goal is that you can *picture* the factory
-in your head first; the SQL later will just be a faithful translation of this picture. No SQL here yet.
+This is the mental model behind the schema — what the factory is and how its tables relate, in plain
+language before any SQL. The goal is to *picture* the factory first; the tables are a faithful
+translation of this picture.
 
 ---
 
@@ -62,8 +63,8 @@ completed). But the order is a *plan* — what actually came off the line is a s
 
 The gap between `planned_quantity` (on the work order) and `produced_quantity` (on its output) is exactly
 the kind of thing a manager asks about: *"Did Line A hit its targets last month?"* — and answering it
-means looking at **two tables together**. Hold that thought; that "looking at two tables together" is a
-**JOIN**, and it's the main SQL skill this project teaches.
+means looking at **two tables together**. That "looking at two tables together" is a **JOIN** — the
+central operation behind almost every question this assistant answers.
 
 ---
 
@@ -124,7 +125,7 @@ How to read it:
   `o{` (crow's foot) end means **many**. So `production_lines ||--o{ machines` reads:
   **one** production line has **many** machines — and each machine belongs to exactly one line.
 - Column types below (`int`, `text`, `bool`, `timestamp`, `time`) are *illustrative* — the exact
-  Postgres types are pinned when we write each migration (Tasks 1.3–1.6). Read this for shape, not types.
+  Postgres types are pinned in the migrations. Read this for shape, not types.
 
 ```mermaid
 erDiagram
@@ -229,19 +230,3 @@ Group the eight tables into two kinds:
 
 Keep this split in mind: **"give me the names from a catalog table, sliced/aggregated from an event
 table, filtered by time"** is the shape of nearly every question this assistant will answer.
-
----
-
-## 7. What we'll build next (just so you see where this is going)
-
-1. Set up **Alembic** (our migration tool) — Task 1.2.
-2. Create the **catalog tables** first (`products`, `production_lines`, `machines`, `shifts`) — Task 1.3.
-3. Then the **event tables** in dependency order (`work_orders` + `production_output`, then
-   `downtime_events`, then `quality_inspections` + `defects`) — Tasks 1.4–1.6.
-4. Add **indexes** on the foreign-key and time columns — Task 1.7.
-5. **Seed** ~12 months of realistic, internally-consistent data — Task 1.8.
-6. Write our **first JOINs by hand** to sanity-check it — Task 1.9.
-
-We build catalog tables before event tables for a concrete reason: a foreign key can only point at a row
-that already exists. `work_orders` can't reference `products` until `products` exists. Dependency order
-*is* build order.

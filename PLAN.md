@@ -94,7 +94,7 @@ where most of the SQL teaching happens.
 - [x] **1.6** Migration: `quality_inspections` (FK → work_orders) + `defects` (FK → inspections). 🎓 SQL: how quality "hangs off" production; the chain work_order → inspection → defect.
 - [x] **1.7** Migration: indexes on FK/time columns used by eval questions. 🎓 SQL: what an index is, why FK + `occurred_at`/`start_date` columns.
 - [x] **1.8** Seed generator (Python script in `db/seed/`): catalog rows + ~12 months of work orders/output/downtime/inspections/defects. 🎓 design: internal consistency rules (scrap≤produced, passed≤inspected, valid FKs, planned/reason_code coherence).
-- [ ] **1.9** Run + sanity-check seed: a few manual `SELECT`/`JOIN` queries to eyeball realism. 🎓 SQL: your first hand-written `JOIN` + `GROUP BY` on our real data.
+- [x] **1.9** Run + sanity-check seed: a few manual `SELECT`/`JOIN` queries to eyeball realism. 🎓 SQL: your first hand-written `JOIN` + `GROUP BY` on our real data.
 
 ### 1B — The non-agentic vertical slice
 
