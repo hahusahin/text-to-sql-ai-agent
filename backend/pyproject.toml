@@ -12,6 +12,8 @@ package-mode = false
 [tool.poe.tasks]
 dev = "uvicorn app.main:app --reload"
 seed = "python -m db.seed.seed"
+migrate = "alembic upgrade head"
+downgrade = "alembic downgrade -1"
 
 [dependency-groups]
 dev = [
