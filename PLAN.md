@@ -115,7 +115,7 @@ public URL at deploy), then convert the one-shot into a hand-written tool-callin
 
 ### 1.5A — Security / guardrails
 
-- [ ] **1.17** Read-only Postgres role (SELECT-only) + migration/script creating it; backend connects as the read-only role. 🎓 SQL: DB roles/privileges, why this is the *real* protection.
+- [x] **1.17** Read-only Postgres role (SELECT-only) + migration/script creating it; backend connects as the read-only role. 🎓 SQL: DB roles/privileges, why this is the *real* protection.
 - [ ] **1.18** SQL allowlist in `core/`: single statement, must be `SELECT`, block multiple statements + dangerous keywords, force a `LIMIT`. 🎓 design: defense-in-depth vs the role.
 - [ ] **1.19** Statement timeout on the DB connection. 🎓 SQL: runaway-query protection.
 - [ ] **1.20** Shared `X-API-Key` check on every FastAPI request (dependency) + gateway sends it from env. 🎓 design: the only auth layer; why it's enough here.

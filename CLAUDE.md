@@ -90,9 +90,16 @@ abstraction** — no patterns for the sake of patterns. Clean and simple beats c
 - **Commit attribution:** commits are authored under **his** git identity only. Do **NOT** add a
   `Co-Authored-By` trailer or any Claude/AI attribution to commit messages.
 - **File/folder creation:** Claude can create files and folders autonomously using tools — no need to
-  wait. Always announce what was created and why. Terminal commands that affect his environment
-  (activating venv, installing packages, running servers, `psql`, docker, migrations) are explained
-  step-by-step for him to run himself.
+  wait. Always announce what was created and why.
+- **Running terminal commands:** Claude **runs verification/inspection commands itself** and reports
+  the results — don't hand a check to the developer just to relay its output. This includes read-only
+  probes (`psql` SELECTs, `alembic current`/`history`, `docker ps`, health checks) **and** applying
+  state to verify the task actually works (running a migration, starting the DB container, seeding a
+  scratch check). If a check needs a local non-secret value the developer hasn't set yet (e.g. a new
+  `.env` line matching `.env.example`), Claude may add it and announce it. **Still leave to him**:
+  (a) commands where *he* learns by doing (e.g. writing a JOIN himself the first time), and (b)
+  anything touching real secrets or a remote/prod environment. When in doubt, run the check and tell
+  him what happened. Always announce env-changing commands you ran.
 - **When a 3rd-party SDK or external API method appears for the first time**, explain it in chat: what
   the method does, its key parameters, what it returns. Not in code comments.
 - **When making a design/architecture decision, briefly explain** (2–4 sentences): why this approach,
@@ -332,5 +339,5 @@ measure the result, not the text.
 | Phase 1.7 | Execution-accuracy eval harness |
 | Phase 2 | Hybrid: free-text column -> embeddings -> combine with SQL; **pgvector** (in same Postgres) + **small OpenAI embedding model** (not Pinecone, not HF) |
 | Phase 3 | Production polish (observability, GitHub Actions CI, optional agent-intermediate-steps view + model routing) — light. NOT a dashboard, NOT SSE token streaming |
-| Working style | Tiny commit-sized tasks; teach as you build (esp. big-picture -> SQL -> relations -> migrations, and agents/async); he approves before commit; he runs all terminal commands |
+| Working style | Tiny commit-sized tasks; teach as you build (esp. big-picture -> SQL -> relations -> migrations, and agents/async); he approves before commit; **Claude runs verification/inspection commands itself and reports back** (incl. migrations/checks); leave to him only learn-by-doing commands and anything touching real secrets / prod |
 | Language | He asks in Turkish/English; answers in English; **no Turkish in code/commits** |
