@@ -37,10 +37,9 @@ target by copying `frontend/.env.local.example` to `frontend/.env.local` (defaul
 
 ## Status
 
-**Phase 0 complete** — repo scaffold & local foundations:
+**Phase 1 complete** — plain text-to-SQL working end-to-end (browser → gateway → FastAPI →
+OpenAI + Postgres). Schema, migrations, and seed are in place; a question is answered by a one-shot
+LLM query (no agent loop yet).
 
-- docker-compose Postgres service
-- FastAPI backend (Poetry) with `GET /health` and env-based settings
-- Next.js 16 frontend (shadcn/ui) with a thin `/api/chat` gateway proxying to the backend
-
-Next: **Phase 1** — plain text-to-SQL (schema, migrations, seed, one-shot query flow).
+Next: **Phase 1.5** — security hardening (read-only role, SQL allowlist, API key) and the
+agentic tool-calling loop with self-correction.

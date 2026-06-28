@@ -1,16 +1,22 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL ?? "http://localhost:8000";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const upstream = await fetch(`${AI_SERVICE_URL}/health`);
-    const backend = await upstream.json();
+    const body = await request.json();
 
-    return NextResponse.json({ gateway: "ok", backend });
+    const upstream = await fetch(`${AI_SERVICE_URL}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await upstream.json();
+    return NextResponse.json(data, { status: upstream.status });
   } catch {
     return NextResponse.json(
-      { gateway: "error", message: "AI service unreachable" },
+      { error: "AI service unreachable" },
       { status: 502 },
     );
   }

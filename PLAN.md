@@ -104,7 +104,7 @@ where most of the SQL teaching happens.
 - [x] **1.13** OpenAI client wrapper in `app/llm/` (pick current cheap mini/nano model from live docs/pricing together; Responses vs Chat Completions decided here). Get OpenAI key into `.env`. 🎓 SDK: the call, messages, what it returns.
 - [x] **1.14** Service: `answer_question()` — build prompt (schema + question) → one LLM call → extract SQL → `run_query` → second LLM call to summarize rows → return `ChatResponse`. 🎓 design: this is the *non-agentic* one-shot; name why it's fragile (no self-correction).
 - [x] **1.15** Route: `POST /chat` wiring request → service → response. End-to-end works from `curl`/Swagger.
-- [ ] **1.16** Frontend: minimal full-page chat UI — input, send, render answer (ugly is fine). Wire through the `/api/chat` gateway. First real end-to-end from the browser. 🎉 skeleton done.
+- [x] **1.16** Frontend: minimal full-page chat UI — input, send, render answer (ugly is fine). Wire through the `/api/chat` gateway. First real end-to-end from the browser. 🎉 skeleton done.
 
 ---
 
