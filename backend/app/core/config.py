@@ -18,6 +18,9 @@ class Settings(BaseSettings):
 
     database_url: str
 
+    openai_api_key: str
+    openai_model: str = "gpt-5.4-mini"
+
 
 @lru_cache
 def get_settings() -> Settings:
