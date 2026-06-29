@@ -24,12 +24,11 @@ from typing import Any
 from app.core.sql_guard import ensure_safe_select
 from app.llm.client import OpenAIClient
 from app.models.chat import ChatResponse
-from app.repositories.schema import get_schema_text
 from app.repositories.sql_repository import SqlRepository
 
-_SQL_INSTRUCTIONS = f"""You translate plain-language questions into a single PostgreSQL SELECT query.
+_SQL_INSTRUCTIONS_TEMPLATE = """You translate plain-language questions into a single PostgreSQL SELECT query.
 
-{get_schema_text()}
+{schema}
 
 Rules:
 - Output exactly ONE SQL SELECT statement and nothing else: no prose, no markdown code fences.
@@ -68,7 +67,9 @@ class TextToSqlService:
         return ChatResponse(answer=answer, sql=safe_sql, rows=rows)
 
     async def _generate_sql(self, question: str) -> str:
-        raw = await self._llm.complete(instructions=_SQL_INSTRUCTIONS, user_input=question)
+        schema_text = await self._repository.get_schema_text()
+        instructions = _SQL_INSTRUCTIONS_TEMPLATE.format(schema=schema_text)
+        raw = await self._llm.complete(instructions=instructions, user_input=question)
         return _strip_code_fences(raw)
 
     async def _summarize(self, question: str, sql: str, rows: list[dict[str, Any]]) -> str:

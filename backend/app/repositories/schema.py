@@ -1,86 +1,79 @@
-"""Schema description handed to the LLM so it can write SQL against our tables.
+"""Render live schema metadata into the text the LLM reads.
 
-Phase 1 keeps this as a hardcoded constant: the schema is settled and changes only
-through migrations we control, so a literal is simpler and cheaper than querying the
-database on every request. In Phase 1.5 (the agent's ``get_schema()`` tool) this is
-replaced by live introspection of ``information_schema`` from the repository — the
-function signature here is chosen to make that swap a drop-in.
+Phase 1 kept the schema as a hardcoded constant. From Phase 1.5 the agent's
+``get_schema()`` tool introspects the live database instead (see
+:class:`AsyncpgRepository`), so the text can never drift from the real tables: a
+new migration shows up here without a code change.
 
-The text is written for a reader (the model), not a parser: it lists each table, its
-columns with types and keys, the foreign keys that connect them, and — crucially — the
-allowed values of the constrained columns, so the model filters on real values instead
-of guessing.
+This module is the *presentation* half of that — a pure function that turns the
+rows fetched from ``information_schema`` / ``pg_catalog`` into a human-readable
+block. Keeping it free of any database handle makes it trivial to unit-test and
+keeps the repository focused on I/O. The DB read lives in the repository; the
+formatting lives here.
+
+The text is written for a reader (the model): each table, its columns with type
+and nullability, then its constraints verbatim from ``pg_get_constraintdef`` —
+primary/foreign keys and the CHECK clauses that pin the allowed values, so the
+model filters on real values instead of guessing.
 """
 
-_SCHEMA_TEXT = """\
-Manufacturing database — discrete-manufacturing factory making industrial
-electrical / electromechanical products. PostgreSQL. All tables are read-only.
+from collections import defaultdict
+from typing import Any
 
-Table products — items the factory makes.
-  id        integer  primary key
-  name      text     not null, unique
-  category  text     not null
-
-Table production_lines — lines / cells on the shop floor.
-  id        integer  primary key
-  name      text     not null, unique
-  location  text     not null
-
-Table machines — machines belonging to a production line.
-  id        integer  primary key
-  line_id   integer  not null, foreign key -> production_lines(id)
-  name      text     not null
-  type      text     not null
-
-Table shifts — work shifts.
-  id          integer  primary key
-  name        text     not null, unique  (e.g. Morning, Evening, Night)
-  start_time  time     not null
-  end_time    time     not null
-
-Table work_orders — a batch/lot of a product scheduled on a line for a shift.
-  id                integer  primary key
-  product_id        integer  not null, foreign key -> products(id)
-  line_id           integer  not null, foreign key -> production_lines(id)
-  shift_id          integer  not null, foreign key -> shifts(id)
-  planned_quantity  integer  not null  (> 0)
-  start_date        date     not null
-  status            text     not null  (one of: 'planned', 'in_progress', 'completed')
-
-Table production_output — what a work order actually produced.
-  id                 integer      primary key
-  work_order_id      integer      not null, foreign key -> work_orders(id)
-  produced_quantity  integer      not null  (>= 0)
-  scrap_quantity     integer      not null  (>= 0, and <= produced_quantity)
-  recorded_at        timestamptz  not null
-
-Table downtime_events — recorded stops on the shop floor.
-  id                integer      primary key
-  line_id           integer      not null, foreign key -> production_lines(id)
-  machine_id        integer      nullable, foreign key -> machines(id)
-  shift_id          integer      not null, foreign key -> shifts(id)
-  reason_code       text         not null  (one of: 'setup_changeover', 'breakdown',
-                                             'material_shortage', 'planned_maintenance')
-  is_planned        boolean      not null
-  duration_minutes  integer      not null  (> 0)
-  occurred_at       timestamptz  not null
-
-Table quality_inspections — QC checks tied to a work order.
-  id                  integer      primary key
-  work_order_id       integer      not null, foreign key -> work_orders(id)
-  inspected_quantity  integer      not null  (> 0)
-  passed_quantity     integer      not null  (>= 0, and <= inspected_quantity)
-  inspected_at        timestamptz  not null
-
-Table defects — defects found in a quality inspection.
-  id             integer  primary key
-  inspection_id  integer  not null, foreign key -> quality_inspections(id)
-  defect_type    text     not null
-  severity       text     not null  (one of: 'minor', 'major', 'critical')
-  quantity       integer  not null  (> 0)
-"""
+# information_schema reports the verbose SQL-standard spelling for a couple of
+# types; shorten them to the names we actually write in migrations.
+_TYPE_ALIASES = {
+    "timestamp with time zone": "timestamptz",
+    "time without time zone": "time",
+}
 
 
-def get_schema_text() -> str:
-    """Return the database schema as human-readable text for the LLM prompt."""
-    return _SCHEMA_TEXT
+def format_schema_text(
+    columns: list[dict[str, Any]],
+    constraints: list[dict[str, Any]],
+) -> str:
+    """Build the schema description from introspected column and constraint rows.
+
+    ``columns`` rows carry ``table_name``, ``column_name``, ``data_type`` and
+    ``is_nullable``; ``constraints`` rows carry ``table_name`` and a ready-made
+    ``definition`` string (e.g. ``PRIMARY KEY (id)`` or a ``CHECK (...)`` clause).
+    Both are expected pre-sorted by the repository's queries.
+    """
+    columns_by_table: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for column in columns:
+        columns_by_table[column["table_name"]].append(column)
+
+    constraints_by_table: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for constraint in constraints:
+        constraints_by_table[constraint["table_name"]].append(constraint)
+
+    blocks = [
+        _format_table(table, cols, constraints_by_table.get(table, []))
+        for table, cols in columns_by_table.items()
+    ]
+
+    header = "Manufacturing database (PostgreSQL), introspected live. All tables are read-only."
+    return header + "\n\n" + "\n\n".join(blocks) + "\n"
+
+
+def _format_table(
+    table: str,
+    columns: list[dict[str, Any]],
+    constraints: list[dict[str, Any]],
+) -> str:
+    name_width = max(len(column["column_name"]) for column in columns)
+    type_width = max(len(_type_label(column["data_type"])) for column in columns)
+
+    lines = [f"Table {table}"]
+    for column in columns:
+        name = column["column_name"].ljust(name_width)
+        type_label = _type_label(column["data_type"]).ljust(type_width)
+        nullability = "not null" if column["is_nullable"] == "NO" else "nullable"
+        lines.append(f"  {name}  {type_label}  {nullability}")
+    for constraint in constraints:
+        lines.append(f"  {constraint['definition']}")
+    return "\n".join(lines)
+
+
+def _type_label(data_type: str) -> str:
+    return _TYPE_ALIASES.get(data_type, data_type)
