@@ -28,13 +28,24 @@ class AsyncpgRepository(SqlRepository):
         self._pool = pool
 
     @classmethod
-    async def create(cls, dsn: str) -> "AsyncpgRepository":
+    async def create(cls, dsn: str, statement_timeout_ms: int) -> "AsyncpgRepository":
         """Open the connection pool and return a ready-to-use repository.
 
         This is an async factory because opening the pool is itself an awaitable
         I/O operation, and ``__init__`` cannot be ``async``.
+
+        ``statement_timeout_ms`` is applied as a Postgres ``statement_timeout`` via
+        ``server_settings``, which sends it as a connection startup parameter. The
+        cancellation is server-side: even if the app stopped waiting, Postgres
+        itself kills a query that runs longer than this, so a runaway query can't
+        pin a pooled connection.
         """
-        pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=10)
+        pool = await asyncpg.create_pool(
+            dsn=dsn,
+            min_size=1,
+            max_size=10,
+            server_settings={"statement_timeout": str(statement_timeout_ms)},
+        )
         return cls(pool)
 
     async def close(self) -> None:

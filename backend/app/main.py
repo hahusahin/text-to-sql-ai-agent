@@ -24,7 +24,10 @@ from app.services.text_to_sql import TextToSqlService
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    repository = await AsyncpgRepository.create(settings.database_url_readonly)
+    repository = await AsyncpgRepository.create(
+        settings.database_url_readonly,
+        statement_timeout_ms=settings.db_statement_timeout_ms,
+    )
     llm = OpenAIClient(api_key=settings.openai_api_key, model=settings.openai_model)
     app.state.text_to_sql = TextToSqlService(llm=llm, repository=repository)
     try:
