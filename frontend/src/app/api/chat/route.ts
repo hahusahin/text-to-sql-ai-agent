@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL ?? "http://localhost:8000";
+const AI_SERVICE_API_KEY = process.env.AI_SERVICE_API_KEY ?? "";
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,7 +9,10 @@ export async function POST(request: NextRequest) {
 
     const upstream = await fetch(`${AI_SERVICE_URL}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": AI_SERVICE_API_KEY,
+      },
       body: JSON.stringify(body),
     });
 

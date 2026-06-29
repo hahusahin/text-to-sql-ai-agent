@@ -14,6 +14,18 @@ fixes its own query on error, and answers in plain language.
 - **Database:** PostgreSQL (Docker locally, Supabase in production).
 - **Tooling:** Poetry, asyncpg, Alembic (raw-SQL migrations).
 
+## Guardrails
+
+The model writes the SQL, so a query could be wrong or unsafe. Several independent layers
+(defense in depth) keep the database protected:
+
+- **Read-only access** — the app connects to the database as a user that can *only read*. Even if the
+  model tried to change or delete data, the database itself would reject it. This is the main safeguard.
+- **Query validation** — every generated query is checked before it runs: it must be a single read-only
+  `SELECT`, risky commands are blocked, and a row limit is always applied.
+- **Query timeout** — the database stops any query that runs too long, so one heavy query can't slow
+  down the whole service.
+
 ## Run locally
 
 Postgres runs in Docker; the apps run on the host for fast hot-reload.

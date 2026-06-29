@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     database_url_readonly: str
     db_statement_timeout_ms: int = 5000
 
+    api_key: str
+
     openai_api_key: str
     openai_model: str = "gpt-5.4-mini"
 

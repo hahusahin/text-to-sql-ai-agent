@@ -10,10 +10,11 @@ below this file just receives what it needs — no module reaches for global con
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core.security import require_api_key
 from app.core.sql_guard import UnsafeSqlError
 from app.llm.client import OpenAIClient
 from app.repositories.sql_repository import AsyncpgRepository
@@ -38,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Manufacturing Text-to-SQL AI Service", lifespan=lifespan)
 
-app.include_router(chat.router)
+app.include_router(chat.router, dependencies=[Depends(require_api_key)])
 
 
 @app.exception_handler(UnsafeSqlError)
