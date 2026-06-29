@@ -10,9 +10,11 @@ below this file just receives what it needs — no module reaches for global con
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core.sql_guard import UnsafeSqlError
 from app.llm.client import OpenAIClient
 from app.repositories.sql_repository import AsyncpgRepository
 from app.routes import chat
@@ -34,6 +36,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Manufacturing Text-to-SQL AI Service", lifespan=lifespan)
 
 app.include_router(chat.router)
+
+
+@app.exception_handler(UnsafeSqlError)
+async def unsafe_sql_handler(request: Request, exc: UnsafeSqlError) -> JSONResponse:
+    """Turn a rejected query into a clean 400 instead of a 500 stack trace."""
+    return JSONResponse(
+        status_code=400,
+        content={"detail": f"The generated query was rejected: {exc.reason}"},
+    )
 
 
 @app.get("/health")

@@ -21,6 +21,7 @@ working end-to-end answer to improve on.
 import json
 from typing import Any
 
+from app.core.sql_guard import ensure_safe_select
 from app.llm.client import OpenAIClient
 from app.models.chat import ChatResponse
 from app.repositories.schema import get_schema_text
@@ -61,9 +62,10 @@ class TextToSqlService:
 
     async def answer_question(self, question: str) -> ChatResponse:
         sql = await self._generate_sql(question)
-        rows = await self._repository.run_query(sql)
-        answer = await self._summarize(question, sql, rows)
-        return ChatResponse(answer=answer, sql=sql, rows=rows)
+        safe_sql = ensure_safe_select(sql)
+        rows = await self._repository.run_query(safe_sql)
+        answer = await self._summarize(question, safe_sql, rows)
+        return ChatResponse(answer=answer, sql=safe_sql, rows=rows)
 
     async def _generate_sql(self, question: str) -> str:
         raw = await self._llm.complete(instructions=_SQL_INSTRUCTIONS, user_input=question)
