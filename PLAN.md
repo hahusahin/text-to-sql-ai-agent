@@ -134,12 +134,16 @@ public URL at deploy), then convert the one-shot into a hand-written tool-callin
 ## >> First Deploy (after Phase 1.5, before Phase 1.7)
 
 Goal: a working public link early, as soon as the agent loop works. Eval (1.7) then runs locally and
-improvements auto-redeploy via CD. Vercel + Render + Supabase.
+improvements auto-redeploy via CD. **Vercel + Hugging Face Spaces + Supabase.** (Backend host switched
+off Render → **HF Spaces free `cpu-basic`**: $0, no credit card, 2 vCPU/16 GB, sleeps only after 48h
+idle. One open risk we verify at D.2: the HF proxy request-timeout must cover the agent loop — if it's
+too short, fall back to Render free + a ~10-min keep-alive ping.)
 
 - [ ] **D.1** Provision **Supabase** managed Postgres (free tier; inactive projects pause, not deleted) + run Alembic migrations + seed against it + create the read-only role there.
-- [ ] **D.2** Backend `Dockerfile` + deploy FastAPI to Render; env vars (DB URL, OpenAI key, API key) set in dashboard. Health check green.
-- [ ] **D.3** Deploy frontend to Vercel; gateway env points at the Render URL + API key. End-to-end works on the public URL.
-- [ ] **D.4** README: live link, screenshot, run-locally instructions, **and a proper "what is this / what happens in this factory" section** — reuse the factory mental-model from `backend/db/README.md` (Task 1.1) so a reader who never saw the schema understands the domain (products, lines, machines, shifts, work orders, output, downtime, quality) and the example questions it can answer. 🎉 shippable portfolio link exists.
+- [ ] **D.2** Backend `Dockerfile` for a **Hugging Face Spaces** Docker SDK Space (app listens on **port 7860**; `app_port`/metadata in the Space `README`); deploy it; secrets (DB URL, OpenAI key, API key) in **Space Settings → Secrets** (not the repo — free Spaces are public). 🎓 deploy: HF Space = its own git repo, push/sync to deploy. **Verify the HF proxy request-timeout covers the agent loop (~20–40s); if too low, fall back to Render free + keep-alive ping.** Health check green.
+- [ ] **D.3** Deploy frontend to Vercel; gateway env points at the HF Space URL (`*.hf.space`) + API key. **Set the Vercel gateway function `maxDuration` to comfortably exceed the backend's worst-case agent-loop response.** End-to-end works on the public URL.
+- [ ] **D.4** Keep-alive: a scheduled **GitHub Action** (or external cron) that pings `/health` more often than every 48h (e.g. daily) so the free Space never hits the idle-sleep. 🎓 design: why a portfolio link that can sit idle for days needs this.
+- [ ] **D.5** README: live link, screenshot, run-locally instructions, **and a proper "what is this / what happens in this factory" section** — reuse the factory mental-model from `backend/db/README.md` (Task 1.1) so a reader who never saw the schema understands the domain (products, lines, machines, shifts, work orders, output, downtime, quality) and the example questions it can answer. 🎉 shippable portfolio link exists.
 
 ---
 
@@ -193,7 +197,7 @@ Vector store = **pgvector in the same Postgres** (Supabase ships it — no separ
 Goal: light hardening + visibility. Document more than gold-plate. (NOT a dashboard, NOT SSE streaming.)
 
 - [ ] **3.1** Observability/tracing: structured logging of each agent step (tool calls, SQL, latency, token use). 🎓 design: what to log in an agent.
-- [ ] **3.2** GitHub Actions CI: run tests + lint + eval on push (CD already automatic via Vercel/Render). 🎓 design: CI before auto-deploy.
+- [ ] **3.2** GitHub Actions CI: run tests + lint + eval on push (CD already wired: Vercel auto-deploys; HF Spaces deploys from its Space repo). 🎓 design: CI before auto-deploy.
 - [ ] **3.3** Backend tests + linter/formatter config wired into CI.
 - [ ] **3.4** (Optional) Surface the agent's intermediate steps in the UI ("inspecting schema… running query… fixing query…"). 🎓 agent: why this beats token streaming in an agent flow.
 - [ ] **3.5** (Optional) Model routing: cheap model default, escalate hard questions. 🎓 design: cost vs capability.

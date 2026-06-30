@@ -282,8 +282,10 @@ measure the result, not the text.
   tool-calling loop (`get_schema`, `run_query`, self-correct-on-error, max-step cap). The phase that
   makes it *agentic*.
 - **>> FIRST DEPLOY happens here — after Phase 1.5, before Phase 1.7.** Once plain text-to-SQL + the
-  agent loop work, put it live (Vercel + Render + managed Supabase Postgres) so a working link exists
-  early. Eval (1.7) then runs against local DB and improvements auto-redeploy via CD.
+  agent loop work, put it live (Vercel + **Hugging Face Spaces** + managed Supabase Postgres) so a
+  working link exists early. **HF Spaces is new to him — teach the Docker-SDK-Space specifics** (app
+  listens on port 7860, secrets in Space settings not the repo, the 48h-sleep keep-alive ping). Eval
+  (1.7) then runs against local DB and improvements auto-redeploy via CD.
 - **Phase 1.7 — Evaluation.** Execution-accuracy harness, taught from scratch.
 - **Phase 2 — Hybrid (structured + unstructured).** Add a free-text column, embed it, combine SQL
   results with semantic search when a question needs both. The "AI layer over structured + unstructured
@@ -291,8 +293,9 @@ measure the result, not the text.
   — no separate vector DB like Pinecone needed); **embeddings = a small OpenAI embedding model.** (HF
   open-source embeddings considered and dropped — pgvector + OpenAI is simpler and reuses our DB.)
 - **Phase 3 — Production polish (kept light).** Observability/tracing, **CI** via GitHub Actions
-  (auto-run tests + lint + eval on push — note: **CD/deploy is already automatic** via Vercel/Render,
-  so the only added piece is automated checks *before* deploy), and optionally **surfacing the agent's
+  (auto-run tests + lint + eval on push — note: **CD/deploy is already wired** — Vercel auto-deploys on
+  push; HF Spaces deploys from its own Space repo (a GitHub→HF sync/push is the trigger) — so the only
+  added piece is automated checks *before* deploy), and optionally **surfacing the agent's
   intermediate steps in the UI** ("inspecting schema… running query… fixing query…") so the
   tool-calling loop is visible to the user — more valuable here than token streaming, because in an
   agent the final answer only arrives after the tool steps. Optional model routing (cheap model
@@ -328,9 +331,9 @@ measure the result, not the text.
 | AI service | Python + FastAPI, layered (routes -> services -> repositories -> core -> models), async |
 | Repo | One repo, plain folder split, no heavy monorepo tooling |
 | Local | docker-compose (Postgres + FastAPI [+ frontend]), internal network |
-| Deploy (prod) | Distributed: Vercel (frontend) + Render (FastAPI) + **Supabase** managed free Postgres (ships pgvector; inactive projects pause, not deleted) |
+| Deploy (prod) | Distributed: Vercel (frontend) + **Hugging Face Spaces** (FastAPI, free `cpu-basic`: 2 vCPU/16 GB, **no credit card**) + **Supabase** managed free Postgres (ships pgvector; inactive projects pause, not deleted). Free Spaces sleep after **48h idle** → a **keep-alive ping** (<48h, e.g. a daily GitHub Action on `/health`) keeps it warm; wake cold-start ~1 min if it ever sleeps. **Open risk, verify at D.2:** HF proxy request-timeout must cover the agent loop (~20–40s); if too low, fall back to **Render free + ~10-min keep-alive ping**. Chose HF over Render to escape Render's 15-min sleep / ~50s cold start; over Koyeb/Railway/Cloud Run because those need a card or lack a guaranteed auto hard-cap |
 | First deploy | After Phase 1.5 (agent loop working), before Phase 1.7 (eval) |
-| CI/CD | CD already automatic via Vercel/Render. CI = GitHub Actions auto-tests/lint/eval on push (Phase 3, light) |
+| CI/CD | CD: Vercel auto-deploys on push; HF Spaces deploys from its own Space repo (wire a GitHub→HF sync/push). CI = GitHub Actions auto-tests/lint/eval on push (Phase 3, light) |
 | Frontend | Full-page chat; **shadcn/ui** base components; **informative** empty state (what is this + what data is behind it + example questions); **TR/EN static UI toggle** (chrome only, not answers); **SQL hidden-but-expandable** per answer + result table |
 | Eval | Execution-accuracy (result match, not text), ~10–15 Q->expected pairs + off-topic; taught from scratch |
 | Comments | None unless a comment earns a non-obvious "why"; docstrings encouraged |
