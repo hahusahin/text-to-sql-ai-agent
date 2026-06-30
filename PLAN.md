@@ -126,8 +126,8 @@ public URL at deploy), then convert the one-shot into a hand-written tool-callin
 - [x] **1.22** Live schema introspection for `get_schema()` (repository reads `information_schema`), replacing the Phase 1 hardcoded constant. 🎓 SQL: querying the catalog.
 - [x] **1.23** The loop in the service: send tools → if model returns tool_calls, execute → feed result **or error text** back → repeat → stop on final text answer. Max-step cap. 🎓 agent: the whole mechanism, termination, why feeding the error back enables self-correction.
 - [x] **1.24** Capture the executed SQL + rows through the loop into `ChatResponse` (the last successful `run_query`), so the UI can show proof.
-- [ ] **1.25** Frontend: SQL **hidden-but-expandable** disclosure + result rendered as a small table (shadcn collapsible + table). 🎓 design: proof-of-real-query UX.
-- [ ] **1.26** Frontend: informative empty state (what-this-is + what-data + 3–4 clickable example questions that auto-send) + TR/EN **static** UI toggle (string dictionary). 🎓 design: static i18n vs translating the answer (it doesn't).
+- [x] **1.25** Frontend: SQL **hidden-but-expandable** disclosure + result rendered as a small table (shadcn collapsible + table). 🎓 design: proof-of-real-query UX.
+- [x] **1.26** Frontend: informative empty state (what-this-is + what-data + 3–4 clickable example questions that auto-send) + TR/EN **static** UI toggle (string dictionary). 🎓 design: static i18n vs translating the answer (it doesn't).
 
 ---
 
@@ -139,7 +139,25 @@ improvements auto-redeploy via CD. Vercel + Render + Supabase.
 - [ ] **D.1** Provision **Supabase** managed Postgres (free tier; inactive projects pause, not deleted) + run Alembic migrations + seed against it + create the read-only role there.
 - [ ] **D.2** Backend `Dockerfile` + deploy FastAPI to Render; env vars (DB URL, OpenAI key, API key) set in dashboard. Health check green.
 - [ ] **D.3** Deploy frontend to Vercel; gateway env points at the Render URL + API key. End-to-end works on the public URL.
-- [ ] **D.4** README: live link, screenshot, "what is this", run-locally instructions. 🎉 shippable portfolio link exists.
+- [ ] **D.4** README: live link, screenshot, run-locally instructions, **and a proper "what is this / what happens in this factory" section** — reuse the factory mental-model from `backend/db/README.md` (Task 1.1) so a reader who never saw the schema understands the domain (products, lines, machines, shifts, work orders, output, downtime, quality) and the example questions it can answer. 🎉 shippable portfolio link exists.
+
+---
+
+## Phase 1.8 — Multi-turn conversation (stateless history)
+
+Goal: turn the single-shot page into a real chatbot — previous Q&As stay on screen, and a follow-up
+can reference an earlier answer (e.g. *"list the lines"* → *"now show downtime for the second one"*).
+Decided **after** First Deploy on purpose (ship the link first; this changes the `/chat` contract).
+Keep the **single-question path still valid** (empty history) so the 1.7 eval harness is unaffected.
+
+- [ ] **1.8.1** Backend: `ChatRequest` carries prior turns (a `messages` history); the agent loop seeds
+  the LLM conversation with them instead of starting empty. 🎓 agent: conversation memory vs the
+  per-question tool loop; why **stateless** (client sends history) beats a server session store here.
+- [ ] **1.8.2** Frontend: keep a `messages[]` list and render the whole thread (question + answer +
+  per-answer SQL/table disclosure), instead of replacing the last response. Send history with each ask.
+- [ ] **1.8.3** Frontend: chat layout polish — scrollable thread with the input pinned at the bottom;
+  switch the page shell to `100dvh`/`min-h-dvh` so it behaves on mobile (address-bar height). 🎓 design:
+  why `dvh` over `vh` on mobile.
 
 ---
 
