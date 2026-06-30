@@ -8,6 +8,11 @@ class Settings(BaseSettings):
 
     Each field maps to an env var of the same name (case-insensitive), e.g.
     the ``database_url`` field is filled from ``DATABASE_URL``.
+
+    ``database_url`` (the privileged owner role) is optional on purpose: only
+    migrations and the seed script use it, and they run locally. The deployed
+    runtime is given the SELECT-only ``database_url_readonly`` and never holds
+    the owner credentials — least privilege as a real boundary, not a convention.
     """
 
     model_config = SettingsConfigDict(
@@ -16,7 +21,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str
+    database_url: str | None = None
     database_url_readonly: str
     db_statement_timeout_ms: int = 5000
 

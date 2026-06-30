@@ -139,7 +139,7 @@ off Render → **HF Spaces free `cpu-basic`**: $0, no credit card, 2 vCPU/16 GB,
 idle. One open risk we verify at D.2: the HF proxy request-timeout must cover the agent loop — if it's
 too short, fall back to Render free + a ~10-min keep-alive ping.)
 
-- [ ] **D.1** Provision **Supabase** managed Postgres (free tier; inactive projects pause, not deleted) + run Alembic migrations + seed against it + create the read-only role there.
+- [x] **D.1** Provision **Supabase** managed Postgres (free tier; inactive projects pause, not deleted) + run Alembic migrations + seed against it + create the read-only role there.
 - [ ] **D.2** Backend `Dockerfile` for a **Hugging Face Spaces** Docker SDK Space (app listens on **port 7860**; `app_port`/metadata in the Space `README`); deploy it; secrets (DB URL, OpenAI key, API key) in **Space Settings → Secrets** (not the repo — free Spaces are public). 🎓 deploy: HF Space = its own git repo, push/sync to deploy. **Verify the HF proxy request-timeout covers the agent loop (~20–40s); if too low, fall back to Render free + keep-alive ping.** Health check green.
 - [ ] **D.3** Deploy frontend to Vercel; gateway env points at the HF Space URL (`*.hf.space`) + API key. **Set the Vercel gateway function `maxDuration` to comfortably exceed the backend's worst-case agent-loop response.** End-to-end works on the public URL.
 - [ ] **D.4** Keep-alive: a scheduled **GitHub Action** (or external cron) that pings `/health` more often than every 48h (e.g. daily) so the free Space never hits the idle-sleep. 🎓 design: why a portfolio link that can sit idle for days needs this.
