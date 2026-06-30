@@ -124,7 +124,7 @@ public URL at deploy), then convert the one-shot into a hand-written tool-callin
 
 - [x] **1.21** Define the two tools as OpenAI tool schemas: `get_schema()` and `run_query(sql)`. 🎓 agent: what a "tool" is to the model (JSON schema), how the model *requests* a call.
 - [x] **1.22** Live schema introspection for `get_schema()` (repository reads `information_schema`), replacing the Phase 1 hardcoded constant. 🎓 SQL: querying the catalog.
-- [ ] **1.23** The loop in the service: send tools → if model returns tool_calls, execute → feed result **or error text** back → repeat → stop on final text answer. Max-step cap. 🎓 agent: the whole mechanism, termination, why feeding the error back enables self-correction.
+- [x] **1.23** The loop in the service: send tools → if model returns tool_calls, execute → feed result **or error text** back → repeat → stop on final text answer. Max-step cap. 🎓 agent: the whole mechanism, termination, why feeding the error back enables self-correction.
 - [ ] **1.24** Capture the executed SQL + rows through the loop into `ChatResponse` (the last successful `run_query`), so the UI can show proof.
 - [ ] **1.25** Frontend: SQL **hidden-but-expandable** disclosure + result rendered as a small table (shadcn collapsible + table). 🎓 design: proof-of-real-query UX.
 - [ ] **1.26** Frontend: informative empty state (what-this-is + what-data + 3–4 clickable example questions that auto-send) + TR/EN **static** UI toggle (string dictionary). 🎓 design: static i18n vs translating the answer (it doesn't).

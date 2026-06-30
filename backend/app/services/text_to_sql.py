@@ -1,53 +1,59 @@
-"""Phase 1 text-to-SQL service — the non-agentic one-shot.
+"""The agentic text-to-SQL service — a hand-written tool-calling loop.
 
-The flow is deliberately the simplest thing that can work end-to-end:
+Turns a plain-language question into a data-backed answer by giving the model two
+tools (``get_schema`` and ``run_query``) and running a loop:
 
-    question
-      -> one LLM call writes ONE SQL SELECT
-      -> we run it read-only
-      -> a second LLM call summarizes the rows in plain language
-      -> ChatResponse(answer, sql, rows)
+    1. send the conversation + the tool catalogue to the model;
+    2. if the model answers with plain text, we're done — return it;
+    3. if instead it *requests* a tool call, we execute that tool, append both its
+       request and our result (or the error text) to the conversation, and go back
+       to step 1;
+    4. a step cap stops a stuck model from looping forever.
 
-It is intentionally **fragile**: there is no tool-calling loop and no
-self-correction. The model writes the SQL blind (it never gets to look around
-first) and never sees the database's response. If its query errors — a wrong
-column name, a bad JOIN — the ``run_query`` call raises and the whole request
-fails; the model has no chance to read the error and fix itself. That
-self-correction is exactly what Phase 1.5 adds by turning this single shot into
-a hand-written agent loop. We build the fragile version first so there is a
-working end-to-end answer to improve on.
+The one idea that makes this "agentic" rather than "retrying": when ``run_query``
+fails, we hand the **error message** back to the model as the tool result instead
+of raising. The model reads ``column "duration" does not exist``, rewrites its
+query, and calls ``run_query`` again — self-correction, with no special-case code
+on our side. We never parse its SQL or guess what it meant; we just keep feeding it
+truth (schema, rows, errors) until it produces an answer.
+
+The loop lives here in the service, not in the OpenAI wrapper, on purpose: the
+tool-calling mechanism stays explicit and framework-free.
 """
 
 import json
 from typing import Any
 
-from app.core.sql_guard import ensure_safe_select
+from app.core.sql_guard import UnsafeSqlError, ensure_safe_select
 from app.llm.client import OpenAIClient
+from app.llm.tools import TOOLS
 from app.models.chat import ChatResponse
-from app.repositories.sql_repository import SqlRepository
+from app.repositories.sql_repository import QueryExecutionError, SqlRepository
 
-_SQL_INSTRUCTIONS_TEMPLATE = """You translate plain-language questions into a single PostgreSQL SELECT query.
+# Each pass of the loop is one model turn (one Responses call). A normal run is
+# short: get_schema, run_query, answer — with a turn or two of slack for the model
+# to read an error and retry. The cap is the safety net against a model that keeps
+# calling tools without ever settling on an answer; it bounds both latency and cost.
+_MAX_STEPS = 6
 
-{schema}
+_AGENT_INSTRUCTIONS = """You are a data analyst answering questions about a manufacturing factory's PostgreSQL database. Answer using ONLY data you read from that database, by using the tools you are given.
+
+Work in steps:
+1. Call get_schema first to learn the exact tables, columns, and the allowed values of constrained columns. Never guess table or column names.
+2. Write a single read-only SELECT and run it with run_query.
+3. If run_query returns an error instead of rows, read the error text and call run_query again with a corrected query.
+4. Once you have the data you need, reply in plain language.
 
 Rules:
-- Output exactly ONE SQL SELECT statement and nothing else: no prose, no markdown code fences.
-- Use only the tables and columns described above.
-- The database is read-only; never write INSERT, UPDATE, DELETE, or any DDL.
-- Always end with a LIMIT of at most 100 rows.
-"""
-
-_SUMMARY_INSTRUCTIONS = """You answer questions about a manufacturing database in plain language.
-
-You are given the user's question, the SQL query that was run, and the rows it returned as JSON.
-Answer the question directly and concisely using only the data in those rows. If the rows are empty,
-say that no matching data was found. Reply in the same language the question was asked in. Do not
-mention SQL, JSON, or how the answer was produced.
+- Keep every query to a single SELECT with a LIMIT of at most 100 rows.
+- Reply in the same language the question was asked in.
+- If the question cannot be answered from this database, say so plainly instead of inventing an answer.
+- Do not mention SQL, tools, or JSON in your final answer — just answer the question.
 """
 
 
 class TextToSqlService:
-    """Turns a plain-language question into an answer backed by a real query.
+    """Runs the agent loop that turns a question into a data-backed answer.
 
     Dependencies are injected (the LLM client and the repository) rather than
     constructed here, so the service stays testable and the repository can be a
@@ -60,34 +66,70 @@ class TextToSqlService:
         self._repository = repository
 
     async def answer_question(self, question: str) -> ChatResponse:
-        sql = await self._generate_sql(question)
-        safe_sql = ensure_safe_select(sql)
-        rows = await self._repository.run_query(safe_sql)
-        answer = await self._summarize(question, safe_sql, rows)
-        return ChatResponse(answer=answer, sql=safe_sql, rows=rows)
+        conversation: list[Any] = [{"role": "user", "content": question}]
 
-    async def _generate_sql(self, question: str) -> str:
-        schema_text = await self._repository.get_schema_text()
-        instructions = _SQL_INSTRUCTIONS_TEMPLATE.format(schema=schema_text)
-        raw = await self._llm.complete(instructions=instructions, user_input=question)
-        return _strip_code_fences(raw)
+        for _ in range(_MAX_STEPS):
+            response = await self._llm.respond(
+                instructions=_AGENT_INSTRUCTIONS,
+                input_items=conversation,
+                tools=TOOLS,
+            )
 
-    async def _summarize(self, question: str, sql: str, rows: list[dict[str, Any]]) -> str:
-        rows_json = json.dumps(rows, default=str, ensure_ascii=False)
-        user_input = f"Question: {question}\n\nSQL run: {sql}\n\nRows (JSON): {rows_json}"
-        return await self._llm.complete(instructions=_SUMMARY_INSTRUCTIONS, user_input=user_input)
+            tool_calls = [item for item in response.output if item.type == "function_call"]
+            if not tool_calls:
+                # No tool requested -> the model is done and this is its final answer.
+                # sql/rows are threaded out of the loop in Task 1.24; for now the
+                # answer text is what we surface.
+                return ChatResponse(answer=response.output_text, sql="", rows=[])
 
+            conversation += response.output
+            for call in tool_calls:
+                result = await self._run_tool(call.name, call.arguments)
+                conversation.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": call.call_id,
+                        "output": result,
+                    }
+                )
 
-def _strip_code_fences(text: str) -> str:
-    """Remove a surrounding markdown code fence if the model added one anyway.
+        return ChatResponse(
+            answer=(
+                "I couldn't work out an answer within the allowed number of steps. "
+                "Please try rephrasing the question."
+            ),
+            sql="",
+            rows=[],
+        )
 
-    We ask for bare SQL, but models often wrap it in ```sql ... ```. This drops
-    the opening fence (with or without a language tag) and the closing fence.
-    """
-    cleaned = text.strip()
-    if not cleaned.startswith("```"):
-        return cleaned
-    lines = cleaned.splitlines()[1:]
-    if lines and lines[-1].strip().startswith("```"):
-        lines = lines[:-1]
-    return "\n".join(lines).strip()
+    async def _run_tool(self, name: str, arguments: str) -> str:
+        """Execute a tool the model asked for and return its result as text.
+
+        The return value is always a plain string because it goes straight back to
+        the model as the tool's output — rows as JSON on success, or an error
+        sentence on failure. Failures are returned, never raised, so the model can
+        read them and try again.
+        """
+        if name == "get_schema":
+            return await self._repository.get_schema_text()
+        if name == "run_query":
+            return await self._run_query_tool(arguments)
+        return f"Unknown tool: {name!r}."
+
+    async def _run_query_tool(self, arguments: str) -> str:
+        try:
+            sql = json.loads(arguments)["sql"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return 'Invalid arguments: expected JSON of the form {"sql": "SELECT ..."}.'
+
+        try:
+            safe_sql = ensure_safe_select(sql)
+        except UnsafeSqlError as exc:
+            return f"Query rejected by the safety check: {exc.reason}"
+
+        try:
+            rows = await self._repository.run_query(safe_sql)
+        except QueryExecutionError as exc:
+            return f"Database error: {exc}"
+
+        return json.dumps(rows, default=str, ensure_ascii=False)

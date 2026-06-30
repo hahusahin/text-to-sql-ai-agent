@@ -1,16 +1,22 @@
 """Thin async wrapper over the OpenAI Responses API.
 
-Phase 1 is non-agentic and needs only a plain text-in / text-out call (write one
-SQL statement, then summarize the rows). Tool calling and the hand-written agent
-loop arrive in Phase 1.5; keeping this minimal now avoids building for a shape we
-do not use yet.
+The wrapper stays deliberately dumb: it knows the model id and the API key and how
+to make one Responses call with tools. It does **not** own the agent loop — that
+lives in the service (see :class:`TextToSqlService`), so the tool-calling mechanism
+is explicit and hand-written rather than hidden behind a framework. This method
+just makes the call and hands the raw response back for the service to inspect.
 
 Conventions (see the ``openai-api-python`` skill): Responses API only, the async
 client, model + key come from config. Stable content (schema/instructions) goes at
-the front so OpenAI's automatic prompt caching can discount the repeated prefix.
+the front so OpenAI's automatic prompt caching can discount the repeated prefix —
+in the loop the instructions and the growing conversation prefix ride along every
+step, so prefix-caching is what keeps the per-step cost down.
 """
 
+from typing import Any
+
 from openai import AsyncOpenAI
+from openai.types.responses import Response
 
 
 class OpenAIClient:
@@ -24,16 +30,25 @@ class OpenAIClient:
         self._client = AsyncOpenAI(api_key=api_key, max_retries=2)
         self._model = model
 
-    async def complete(self, instructions: str, user_input: str) -> str:
-        """Send one request and return the model's plain-text answer.
+    async def respond(
+        self,
+        instructions: str,
+        input_items: list[Any],
+        tools: list[dict[str, Any]],
+    ) -> Response:
+        """Make one Responses API call and return the raw response.
 
-        ``instructions`` is the stable, system-level guidance (the DB schema lives
-        here — keeping it first makes the prompt prefix cache-friendly).
-        ``user_input`` is the variable part (the user's question).
+        ``instructions`` is the stable system guidance (cache-friendly prefix).
+        ``input_items`` is the running conversation: the user's question plus, on
+        later turns, the model's own tool-call items and our tool results.
+        ``tools`` is the catalogue the model may call from.
+
+        Returns the raw SDK ``Response`` so the caller can read ``response.output``
+        (to spot tool-call requests) or ``response.output_text`` (the final answer).
         """
-        response = await self._client.responses.create(
+        return await self._client.responses.create(
             model=self._model,
             instructions=instructions,
-            input=user_input,
+            input=input_items,
+            tools=tools,
         )
-        return response.output_text

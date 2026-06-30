@@ -36,6 +36,18 @@ _CONSTRAINTS_SQL = """
 """
 
 
+class QueryExecutionError(Exception):
+    """Raised when the database rejects or fails to run a query.
+
+    The repository translates the asyncpg driver's own error into this domain
+    error, so the service and the agent loop can react to a failed query — feeding
+    the message back to the model so it can self-correct — without importing
+    asyncpg or knowing which driver is underneath. The original Postgres message
+    (e.g. ``column "duration" does not exist``) is preserved as the string value,
+    because that detail is exactly what lets the model fix its SQL.
+    """
+
+
 class SqlRepository(Protocol):
     """The read-only SQL access contract the rest of the app depends on.
 
@@ -45,7 +57,11 @@ class SqlRepository(Protocol):
     """
 
     async def run_query(self, sql: str) -> list[dict[str, Any]]:
-        """Execute a read-only query and return its rows as dictionaries."""
+        """Execute a read-only query and return its rows as dictionaries.
+
+        Raises :class:`QueryExecutionError` if the database rejects or fails the
+        query (bad column, syntax error, statement timeout).
+        """
         ...
 
     async def get_schema_text(self) -> str:
@@ -91,8 +107,11 @@ class AsyncpgRepository(SqlRepository):
         await self._pool.close()
 
     async def run_query(self, sql: str) -> list[dict[str, Any]]:
-        async with self._pool.acquire() as connection:
-            records = await connection.fetch(sql)
+        try:
+            async with self._pool.acquire() as connection:
+                records = await connection.fetch(sql)
+        except asyncpg.PostgresError as exc:
+            raise QueryExecutionError(str(exc)) from exc
         return [dict(record) for record in records]
 
     async def get_schema_text(self) -> str:
