@@ -22,6 +22,7 @@ tool-calling mechanism stays explicit and framework-free.
 """
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from app.core.sql_guard import UnsafeSqlError, ensure_safe_select
@@ -35,6 +36,21 @@ from app.repositories.sql_repository import QueryExecutionError, SqlRepository
 # to read an error and retry. The cap is the safety net against a model that keeps
 # calling tools without ever settling on an answer; it bounds both latency and cost.
 _MAX_STEPS = 6
+
+
+@dataclass
+class _ToolResult:
+    """What running one tool produced.
+
+    ``output`` is the text fed back to the model (rows as JSON, schema text, or an
+    error sentence). ``sql`` and ``rows`` are set **only** when a ``run_query`` call
+    succeeded, so the loop can capture the query behind the answer as proof — a
+    failed query has nothing to show and leaves them ``None``.
+    """
+
+    output: str
+    sql: str | None = None
+    rows: list[dict[str, Any]] | None = None
 
 _AGENT_INSTRUCTIONS = """You are a data analyst answering questions about a manufacturing factory's PostgreSQL database. Answer using ONLY data you read from that database, by using the tools you are given.
 
@@ -67,6 +83,8 @@ class TextToSqlService:
 
     async def answer_question(self, question: str) -> ChatResponse:
         conversation: list[Any] = [{"role": "user", "content": question}]
+        last_sql = ""
+        last_rows: list[dict[str, Any]] = []
 
         for _ in range(_MAX_STEPS):
             response = await self._llm.respond(
@@ -77,19 +95,20 @@ class TextToSqlService:
 
             tool_calls = [item for item in response.output if item.type == "function_call"]
             if not tool_calls:
-                # No tool requested -> the model is done and this is its final answer.
-                # sql/rows are threaded out of the loop in Task 1.24; for now the
-                # answer text is what we surface.
-                return ChatResponse(answer=response.output_text, sql="", rows=[])
+                # No tool requested -> the model is done; surface its answer plus the
+                # last query that actually returned rows (the proof behind it).
+                return ChatResponse(answer=response.output_text, sql=last_sql, rows=last_rows)
 
             conversation += response.output
             for call in tool_calls:
                 result = await self._run_tool(call.name, call.arguments)
+                if result.sql is not None:
+                    last_sql, last_rows = result.sql, result.rows or []
                 conversation.append(
                     {
                         "type": "function_call_output",
                         "call_id": call.call_id,
-                        "output": result,
+                        "output": result.output,
                     }
                 )
 
@@ -98,38 +117,39 @@ class TextToSqlService:
                 "I couldn't work out an answer within the allowed number of steps. "
                 "Please try rephrasing the question."
             ),
-            sql="",
-            rows=[],
+            sql=last_sql,
+            rows=last_rows,
         )
 
-    async def _run_tool(self, name: str, arguments: str) -> str:
-        """Execute a tool the model asked for and return its result as text.
+    async def _run_tool(self, name: str, arguments: str) -> _ToolResult:
+        """Execute a tool the model asked for and return its result.
 
-        The return value is always a plain string because it goes straight back to
-        the model as the tool's output — rows as JSON on success, or an error
-        sentence on failure. Failures are returned, never raised, so the model can
-        read them and try again.
+        ``_ToolResult.output`` always carries the text fed back to the model — rows
+        as JSON on success, or an error sentence on failure. Failures are returned,
+        never raised, so the model can read them and try again. A successful
+        ``run_query`` additionally carries the SQL and rows for the loop to capture.
         """
         if name == "get_schema":
-            return await self._repository.get_schema_text()
+            return _ToolResult(output=await self._repository.get_schema_text())
         if name == "run_query":
             return await self._run_query_tool(arguments)
-        return f"Unknown tool: {name!r}."
+        return _ToolResult(output=f"Unknown tool: {name!r}.")
 
-    async def _run_query_tool(self, arguments: str) -> str:
+    async def _run_query_tool(self, arguments: str) -> _ToolResult:
         try:
             sql = json.loads(arguments)["sql"]
         except (json.JSONDecodeError, KeyError, TypeError):
-            return 'Invalid arguments: expected JSON of the form {"sql": "SELECT ..."}.'
+            return _ToolResult('Invalid arguments: expected JSON of the form {"sql": "SELECT ..."}.')
 
         try:
             safe_sql = ensure_safe_select(sql)
         except UnsafeSqlError as exc:
-            return f"Query rejected by the safety check: {exc.reason}"
+            return _ToolResult(f"Query rejected by the safety check: {exc.reason}")
 
         try:
             rows = await self._repository.run_query(safe_sql)
         except QueryExecutionError as exc:
-            return f"Database error: {exc}"
+            return _ToolResult(f"Database error: {exc}")
 
-        return json.dumps(rows, default=str, ensure_ascii=False)
+        output = json.dumps(rows, default=str, ensure_ascii=False)
+        return _ToolResult(output=output, sql=safe_sql, rows=rows)
