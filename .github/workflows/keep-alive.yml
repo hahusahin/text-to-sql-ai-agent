@@ -1,0 +1,23 @@
+name: keep-alive
+
+# The backend runs on a free Hugging Face Space, which sleeps after 48h idle.
+# A portfolio link can sit untouched for days, so we ping its health endpoint
+# daily to keep the Space warm. Vercel is serverless and never sleeps, so only
+# the HF Space needs this.
+
+on:
+  schedule:
+    # Daily at 06:00 UTC — well inside the 48h idle window, with margin for
+    # GitHub's scheduling delays under load.
+    - cron: "0 6 * * *"
+  # Lets us trigger a run by hand from the Actions tab (handy for testing).
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend /health
+        # -f fails the job on a non-2xx response so a dead backend is visible
+        # in the Actions tab instead of silently passing.
+        run: curl -fsS -m 30 https://hahusahin-text-to-sql-ai-service.hf.space/health
