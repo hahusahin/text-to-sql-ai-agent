@@ -121,6 +121,46 @@
     "unanswerable": false
   },
   {
+    "id": "V1",
+    "difficulty": "veryhard",
+    "question": "For each product category, which product has the highest total defect quantity? Give the category, the product name, and that total.",
+    "reference_sql": "SELECT category, name, total FROM (SELECT p.category, p.name, SUM(d.quantity) AS total, ROW_NUMBER() OVER (PARTITION BY p.category ORDER BY SUM(d.quantity) DESC, p.name) AS rn FROM defects d JOIN quality_inspections qi ON qi.id = d.inspection_id JOIN work_orders wo ON wo.id = qi.work_order_id JOIN products p ON p.id = wo.product_id GROUP BY p.category, p.name) q WHERE rn = 1 ORDER BY category;",
+    "expected_result": [
+      { "category": "Contactors", "name": "Type K Contactor", "total": 1281 },
+      { "category": "Control Units", "name": "Servo Control Unit", "total": 997 },
+      { "category": "Motors", "name": "3-Phase Induction Motor", "total": 1252 },
+      { "category": "Switchgear", "name": "630A Switchgear Panel", "total": 1203 },
+      { "category": "Transformers", "name": "MV Distribution Transformer", "total": 1100 }
+    ],
+    "expected_tables": ["defects", "quality_inspections", "work_orders", "products"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "V2",
+    "difficulty": "veryhard",
+    "question": "Which production lines have total unplanned downtime above the per-line average? Give each line and its total unplanned downtime minutes.",
+    "reference_sql": "SELECT pl.name, SUM(de.duration_minutes) AS total_unplanned FROM downtime_events de JOIN production_lines pl ON pl.id = de.line_id WHERE de.is_planned = false GROUP BY pl.name HAVING SUM(de.duration_minutes) > (SELECT AVG(line_total) FROM (SELECT SUM(duration_minutes) AS line_total FROM downtime_events WHERE is_planned = false GROUP BY line_id) x) ORDER BY total_unplanned DESC;",
+    "expected_result": [
+      { "name": "Assembly Line A", "total_unplanned": 7504 },
+      { "name": "Winding Cell 1", "total_unplanned": 7380 },
+      { "name": "Testing & Packaging", "total_unplanned": 7259 }
+    ],
+    "expected_tables": ["downtime_events", "production_lines"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "V3",
+    "difficulty": "veryhard",
+    "question": "In which calendar month (formatted YYYY-MM) was the factory's overall scrap rate highest? Give the month and the scrap rate.",
+    "reference_sql": "SELECT to_char(date_trunc('month', po.recorded_at), 'YYYY-MM') AS month, round(SUM(po.scrap_quantity)::numeric / NULLIF(SUM(po.produced_quantity), 0), 4) AS scrap_rate FROM production_output po GROUP BY 1 ORDER BY scrap_rate DESC LIMIT 1;",
+    "expected_result": [{ "month": "2026-01", "scrap_rate": 0.0423 }],
+    "expected_tables": ["production_output"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
     "id": "O1",
     "difficulty": "offtopic",
     "question": "What was the outdoor temperature at the factory last week?",

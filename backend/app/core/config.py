@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     database_url_readonly: str
     db_statement_timeout_ms: int = 5000
 
+    # The execution-accuracy eval must run against the SAME dataset its ground truth
+    # was captured from — the local database — not the deployed one, whose seeded
+    # values differ. So the eval harness reads its own URL (defaulting to the local
+    # read-only role) instead of ``database_url_readonly``, which in a real .env points
+    # at production. Only the harness reads this; the app runtime ignores it.
+    eval_database_url: str = (
+        "postgresql://readonly_user:readonly_local_dev@localhost:5432/manufacturing"
+    )
+
     api_key: str
 
     openai_api_key: str
