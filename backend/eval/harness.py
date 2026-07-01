@@ -53,6 +53,20 @@ _JUDGE_INSTRUCTIONS = (
     "gave a substantive data-backed answer."
 )
 
+# Hybrid questions need semantic search over free-text notes, so their answer is
+# approximate and has no single exact result to match (the retrieved set is bounded
+# and depends on phrasing). We grade the answer text against a rubric instead —
+# LLM-as-judge again, but scoring correctness, not abstention.
+_HYBRID_JUDGE_INSTRUCTIONS = (
+    "You are grading an AI assistant that answers questions about a manufacturing "
+    "database, some needing semantic search over operators' free-text downtime notes. "
+    "You are given the user question, a RUBRIC describing what a correct answer must "
+    "contain, and the assistant's answer. Reply with exactly one word: YES if the "
+    "answer satisfies the rubric and is grounded in the data, or NO otherwise. Exact "
+    "numbers may differ from any figure the rubric mentions when the rubric calls the "
+    "value approximate; judge the substance, not wording or language."
+)
+
 
 @dataclass
 class Result:
@@ -64,6 +78,7 @@ class Result:
     rows: list[dict] = field(default_factory=list)
     error: str | None = None
     abstained: bool | None = None  # set only for unanswerable questions (via the judge)
+    hybrid_correct: bool | None = None  # set only for judge-graded hybrid questions
 
 
 def _load_questions() -> list[dict]:
@@ -97,6 +112,7 @@ def _save_run(results: list["Result"]) -> None:
             "rows": r.rows,
             "error": r.error,
             "abstained": r.abstained,
+            "hybrid_correct": r.hybrid_correct,
         }
         for r in results
     ]
@@ -118,6 +134,7 @@ def _load_run(questions: list[dict]) -> list["Result"]:
             rows=saved[q["id"]]["rows"],
             error=saved[q["id"]]["error"],
             abstained=saved[q["id"]]["abstained"],
+            hybrid_correct=saved[q["id"]].get("hybrid_correct"),
         )
         for q in questions
     ]
@@ -130,7 +147,11 @@ async def _build_service() -> tuple[TextToSqlService, AsyncpgRepository]:
         settings.eval_database_url,
         statement_timeout_ms=settings.db_statement_timeout_ms,
     )
-    llm = OpenAIClient(api_key=settings.openai_api_key, model=settings.openai_model)
+    llm = OpenAIClient(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+        embedding_model=settings.openai_embedding_model,
+    )
     return TextToSqlService(llm=llm, repository=repository), repository
 
 
@@ -169,6 +190,16 @@ def _abstained(r: Result) -> bool:
     return bool(r.abstained)
 
 
+def _is_hybrid(question: dict) -> bool:
+    """A hybrid question is graded by the rubric judge, not by exact result match."""
+    return question.get("grading") == "judge"
+
+
+def _hybrid_ok(r: Result) -> bool:
+    """For a hybrid question: the judge decided the answer satisfied the rubric."""
+    return bool(r.hybrid_correct)
+
+
 async def _judge_abstained(judge: AsyncOpenAI, model: str, question: str, answer: str) -> bool:
     """Ask a separate LLM whether ``answer`` declined the (unanswerable) question."""
     response = await judge.responses.create(
@@ -179,14 +210,33 @@ async def _judge_abstained(judge: AsyncOpenAI, model: str, question: str, answer
     return response.output_text.strip().upper().startswith("YES")
 
 
+async def _judge_hybrid(
+    judge: AsyncOpenAI, model: str, question: str, rubric: str, answer: str
+) -> bool:
+    """Ask a separate LLM whether ``answer`` satisfies the hybrid question's rubric."""
+    response = await judge.responses.create(
+        model=model,
+        instructions=_HYBRID_JUDGE_INSTRUCTIONS,
+        input=(
+            f"Question: {question}\n\n"
+            f"Rubric for a correct answer: {rubric}\n\n"
+            f"Assistant answer: {answer}"
+        ),
+    )
+    return response.output_text.strip().upper().startswith("YES")
+
+
 def _rate(results: list[Result], predicate) -> str:
     passed = sum(1 for r in results if predicate(r))
     return f"{passed}/{len(results)}" if results else "0/0"
 
 
 def _report(results: list[Result]) -> None:
-    answerable = [r for r in results if not r.question["unanswerable"]]
     offtopic = [r for r in results if r.question["unanswerable"]]
+    hybrid = [r for r in results if _is_hybrid(r.question)]
+    answerable = [
+        r for r in results if not r.question["unanswerable"] and not _is_hybrid(r.question)
+    ]
 
     print("\nPer-question:\n")
     for r in results:
@@ -196,6 +246,11 @@ def _report(results: list[Result]) -> None:
             print(f"  {'PASS' if ok else 'FAIL'}  {q['id']:3} [{q['difficulty']}] abstention")
             if not ok:
                 print(f"        -> did not decline: {r.error or r.answer}")
+        elif _is_hybrid(q):
+            ok = _hybrid_ok(r)
+            print(f"  {'PASS' if ok else 'FAIL'}  {q['id']:3} [{q['difficulty']}] judge")
+            if not ok:
+                print(f"        -> judge rejected: {r.error or r.answer}")
         else:
             ok = _accurate(r)
             flags = f"exec={'Y' if _executed(r) else 'N'} tables={'Y' if _tables_used(r) else 'N'}"
@@ -208,6 +263,7 @@ def _report(results: list[Result]) -> None:
     print(f"  SQL executed         : {_rate(answerable, _executed)}")
     print(f"  Correct tables used  : {_rate(answerable, _tables_used)}")
     print(f"  Abstention (offtopic): {_rate(offtopic, _abstained)}")
+    print(f"  Hybrid (judge)       : {_rate(hybrid, _hybrid_ok)}")
 
     print("\n  Execution accuracy by difficulty:")
     for tier in _TIER_ORDER:
@@ -231,6 +287,16 @@ async def run_eval() -> None:
             r.abstained = (
                 False if r.error else await _judge_abstained(
                     judge, settings.openai_model, r.question["question"], r.answer
+                )
+            )
+        elif _is_hybrid(r.question):
+            r.hybrid_correct = (
+                False if r.error else await _judge_hybrid(
+                    judge,
+                    settings.openai_model,
+                    r.question["question"],
+                    r.question["expected_answer"],
+                    r.answer,
                 )
             )
 

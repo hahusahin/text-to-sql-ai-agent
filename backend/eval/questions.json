@@ -24,7 +24,7 @@
     "difficulty": "medium",
     "question": "Which production line has accumulated the most unplanned downtime, measured in total minutes? Give the line and the total.",
     "reference_sql": "SELECT pl.name, SUM(de.duration_minutes) AS total_unplanned_minutes FROM downtime_events de JOIN production_lines pl ON pl.id = de.line_id WHERE de.is_planned = false GROUP BY pl.name ORDER BY total_unplanned_minutes DESC LIMIT 1;",
-    "expected_result": [{ "name": "Assembly Line A", "total_unplanned_minutes": 7504 }],
+    "expected_result": [{ "name": "Assembly Line A", "total_unplanned_minutes": 7849 }],
     "expected_tables": ["downtime_events", "production_lines"],
     "order_sensitive": true,
     "unanswerable": false
@@ -45,10 +45,10 @@
     "question": "Break down the total downtime minutes by reason code, from highest to lowest.",
     "reference_sql": "SELECT reason_code, SUM(duration_minutes) AS total_minutes FROM downtime_events GROUP BY reason_code ORDER BY total_minutes DESC;",
     "expected_result": [
-      { "reason_code": "breakdown", "total_minutes": 21990 },
-      { "reason_code": "planned_maintenance", "total_minutes": 15607 },
-      { "reason_code": "material_shortage", "total_minutes": 5938 },
-      { "reason_code": "setup_changeover", "total_minutes": 4960 }
+      { "reason_code": "breakdown", "total_minutes": 21898 },
+      { "reason_code": "planned_maintenance", "total_minutes": 16605 },
+      { "reason_code": "material_shortage", "total_minutes": 7129 },
+      { "reason_code": "setup_changeover", "total_minutes": 4619 }
     ],
     "expected_tables": ["downtime_events"],
     "order_sensitive": true,
@@ -95,7 +95,7 @@
     "difficulty": "trap",
     "question": "Which machine has the most breakdowns? Give the machine and the number of breakdown events.",
     "reference_sql": "SELECT m.name, count(*) AS breakdown_events FROM downtime_events de JOIN machines m ON m.id = de.machine_id WHERE de.reason_code = 'breakdown' GROUP BY m.name ORDER BY breakdown_events DESC LIMIT 1;",
-    "expected_result": [{ "name": "Tester A1", "breakdown_events": 10 }],
+    "expected_result": [{ "name": "Tester A1", "breakdown_events": 8 }],
     "expected_tables": ["downtime_events", "machines"],
     "order_sensitive": true,
     "unanswerable": false
@@ -105,7 +105,7 @@
     "difficulty": "trap",
     "question": "How many machines have never had a breakdown recorded?",
     "reference_sql": "SELECT count(*) AS machines_without_breakdown FROM machines m WHERE NOT EXISTS (SELECT 1 FROM downtime_events de WHERE de.machine_id = m.id AND de.reason_code = 'breakdown');",
-    "expected_result": [{ "machines_without_breakdown": 1 }],
+    "expected_result": [{ "machines_without_breakdown": 0 }],
     "expected_tables": ["machines", "downtime_events"],
     "order_sensitive": false,
     "unanswerable": false
@@ -115,7 +115,7 @@
     "difficulty": "trap",
     "question": "In June 2026, which production line had the most unplanned downtime minutes?",
     "reference_sql": "SELECT pl.name, SUM(de.duration_minutes) AS total_unplanned_minutes FROM downtime_events de JOIN production_lines pl ON pl.id = de.line_id WHERE de.is_planned = false AND de.occurred_at >= '2026-06-01' AND de.occurred_at < '2026-07-01' GROUP BY pl.name ORDER BY total_unplanned_minutes DESC LIMIT 1;",
-    "expected_result": [{ "name": "Assembly Line A", "total_unplanned_minutes": 929 }],
+    "expected_result": [{ "name": "Assembly Line B", "total_unplanned_minutes": 1125 }],
     "expected_tables": ["downtime_events", "production_lines"],
     "order_sensitive": true,
     "unanswerable": false
@@ -142,9 +142,9 @@
     "question": "Which production lines have total unplanned downtime above the per-line average? Give each line and its total unplanned downtime minutes.",
     "reference_sql": "SELECT pl.name, SUM(de.duration_minutes) AS total_unplanned FROM downtime_events de JOIN production_lines pl ON pl.id = de.line_id WHERE de.is_planned = false GROUP BY pl.name HAVING SUM(de.duration_minutes) > (SELECT AVG(line_total) FROM (SELECT SUM(duration_minutes) AS line_total FROM downtime_events WHERE is_planned = false GROUP BY line_id) x) ORDER BY total_unplanned DESC;",
     "expected_result": [
-      { "name": "Assembly Line A", "total_unplanned": 7504 },
-      { "name": "Winding Cell 1", "total_unplanned": 7380 },
-      { "name": "Testing & Packaging", "total_unplanned": 7259 }
+      { "name": "Assembly Line A", "total_unplanned": 7849 },
+      { "name": "Assembly Line B", "total_unplanned": 7429 },
+      { "name": "Panel Build Line", "total_unplanned": 6872 }
     ],
     "expected_tables": ["downtime_events", "production_lines"],
     "order_sensitive": false,
@@ -155,8 +155,44 @@
     "difficulty": "veryhard",
     "question": "In which calendar month (formatted YYYY-MM) was the factory's overall scrap rate highest? Give the month and the scrap rate.",
     "reference_sql": "SELECT to_char(date_trunc('month', po.recorded_at), 'YYYY-MM') AS month, round(SUM(po.scrap_quantity)::numeric / NULLIF(SUM(po.produced_quantity), 0), 4) AS scrap_rate FROM production_output po GROUP BY 1 ORDER BY scrap_rate DESC LIMIT 1;",
-    "expected_result": [{ "month": "2026-01", "scrap_rate": 0.0423 }],
+    "expected_result": [{ "month": "2026-01", "scrap_rate": 0.0429 }],
     "expected_tables": ["production_output"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "HY1",
+    "difficulty": "hybrid",
+    "question": "Which production lines have had oil or hydraulic leak problems, according to the operators' downtime notes?",
+    "grading": "judge",
+    "expected_answer": "The answer must identify production lines from the free-text downtime notes describing oil or hydraulic leaks/seepage, not merely the coarse reason_code. All five production lines have leak-related notes: Assembly Line A, Assembly Line B, Panel Build Line, Testing & Packaging, and Winding Cell 1. A correct answer names all or a clear majority of these lines and does not claim the database lacks this information.",
+    "reference_sql": null,
+    "expected_result": null,
+    "expected_tables": [],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "HY2",
+    "difficulty": "hybrid",
+    "question": "Which production line has accumulated the most downtime from oil or hydraulic leaks?",
+    "grading": "judge",
+    "expected_answer": "This requires finding leak-related downtime from the free-text notes (semantic search) and comparing totals per line. The correct line is Assembly Line A, which has the most leak-related downtime (about 2,200 minutes across roughly 11 events); the exact figure is approximate because it depends on how many notes were retrieved. A correct answer names Assembly Line A as the top line and does not decline or answer purely from reason_code.",
+    "reference_sql": null,
+    "expected_result": null,
+    "expected_tables": [],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "HY3",
+    "difficulty": "hybrid",
+    "question": "What kinds of material shortages have caused downtime? Summarize what the operators reported.",
+    "grading": "judge",
+    "expected_answer": "The answer must summarize specific material-shortage causes drawn from the free-text notes, not just restate the reason_code. Correct specifics include copper busbar delivery delays, running out of terminal blocks, insulation sheets not delivered on time, missing coil wire, and being short on labels/packaging. A correct answer mentions several of these specific materials and is grounded in the notes rather than generic.",
+    "reference_sql": null,
+    "expected_result": null,
+    "expected_tables": [],
     "order_sensitive": false,
     "unanswerable": false
   },

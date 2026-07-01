@@ -75,6 +75,13 @@ match":
   *semantic* judgement — it may probe with a query first and may reply in any language — so a small
   separate LLM call (an **LLM-as-judge**) reads the answer text and decides. "Pass" means the agent
   abstained; a "fail" is the agent fabricating a data answer for something the schema can't support.
+- **Hybrid questions graded by rubric.** Phase 2 added questions that need semantic search over the
+  free-text downtime notes ("which lines had oil-leak problems?"). Their answers are *approximate* —
+  the retrieved set is bounded and shifts with how the model phrases the search — so there is no single
+  exact result to match. These are graded by the same **LLM-as-judge**, but scoring *correctness*: it
+  reads the answer against a rubric of what a right answer must contain and replies YES/NO. A question
+  opts in with `"grading": "judge"` and carries an `expected_answer` rubric instead of an
+  `expected_result`.
 
 ## How it's laid out
 
@@ -108,17 +115,32 @@ migrations + seed have run.
 
 ## Baseline
 
-Model `gpt-5.4-mini`, 17 questions (14 answerable + 3 off-topic), local DB:
+Model `gpt-5.4-mini`, 20 questions (14 answerable + 3 hybrid + 3 off-topic), local DB:
 
 | Metric | Result |
 | --- | --- |
-| Execution accuracy | 14/14 (easy 2/2 · medium 3/3 · hard 3/3 · veryhard 3/3) |
+| Execution accuracy | 13/14 (easy 2/2 · medium 3/3 · hard 3/3 · trap 2/3 · veryhard 3/3) |
 | SQL executed | 14/14 |
 | Correct tables used | 14/14 |
-| Abstention (off-topic) | 2–3/3 |
+| Hybrid (judge) | 2/3 |
+| Abstention (off-topic) | 2/3 |
 
-The agent is strong on the answerable set — the traps and the very-hard questions (window function,
-correlated-subquery threshold, month bucketing) all pass. The one soft spot is **abstention**: it's
-non-deterministic (2/3 on some runs, 3/3 on others) because the agent occasionally forces an off-topic
-question onto the schema — e.g. answering "which supplier delivered the most?" by naming a *product* —
-instead of declining. That variance is a real property of the agent, left visible rather than hidden.
+The agent is strong on the answerable set — the very-hard questions (window function,
+correlated-subquery threshold, month bucketing) all pass. The remaining reds are honest signals, not
+infrastructure bugs:
+
+- **Trap 2/3** — `T1` ("which machine has the most breakdowns?") is a **three-way tie** at 8 breakdowns
+  under the current data, so the reference SQL and the agent each pick a different (equally correct)
+  machine. An ambiguity in the question, exposed by the data, not a wrong answer.
+- **Hybrid 2/3** — `HY2` asks which line has the most leak-related downtime; the agent named the wrong
+  line (the approximate top-k retrieval undercounts), and the judge correctly failed it. The eval doing
+  its job.
+- **Abstention 2/3** — non-deterministic: the agent occasionally forces an off-topic question onto the
+  schema — e.g. answering "which supplier delivered the most?" by naming a *product* — instead of
+  declining. A real property of the agent, left visible rather than hidden.
+
+**Ground-truth note.** The seed is anchored to `date.today()`, so re-seeding (as Phase 2 did, to add
+the notes) shifts every aggregate and the frozen `expected_result` values go stale. When that happens,
+re-capture them by running each `reference_sql` against the current DB — the reference queries are the
+oracle; only the numbers move. A sturdier fix (a date-deterministic seed, or executing the reference
+SQL live) is noted for later.
