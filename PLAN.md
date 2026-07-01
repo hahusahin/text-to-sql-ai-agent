@@ -147,6 +147,19 @@ too short, fall back to Render free + a ~10-min keep-alive ping.)
 
 ---
 
+## Phase 1.7 — Evaluation (execution-accuracy)
+
+Goal: a reproducible harness that measures the **result**, not the text. Catches regressions; fixes
+auto-redeploy via the CD already wired in First Deploy.
+
+- [x] **1.27** 🎓 design (eval from scratch): write `eval/README.md` — what execution-accuracy is and why text-match is wrong for SQL.
+- [ ] **1.28** Ground-truth set: ~10–15 `(question → reference SQL / expected result)` pairs incl. a few off-topic/unanswerable. Stored as data (JSON/YAML) in `eval/`.
+- [ ] **1.29** Harness core: run each question through the agent, execute generated SQL, compare result to expected (order-insensitive). Report per-question pass/fail.
+- [ ] **1.30** Extra checks: (a) did SQL execute without error, (b) right tables used, (c) abstention on off-topic. Summary metrics printed.
+- [ ] **1.31** One script entrypoint to rerun the whole eval; baseline numbers recorded in README.
+
+---
+
 ## Phase 1.8 — Multi-turn conversation (stateless history)
 
 Goal: turn the single-shot page into a real chatbot — previous Q&As stay on screen, and a follow-up
@@ -162,19 +175,6 @@ Keep the **single-question path still valid** (empty history) so the 1.7 eval ha
 - [ ] **1.8.3** Frontend: chat layout polish — scrollable thread with the input pinned at the bottom;
   switch the page shell to `100dvh`/`min-h-dvh` so it behaves on mobile (address-bar height). 🎓 design:
   why `dvh` over `vh` on mobile.
-
----
-
-## Phase 1.7 — Evaluation (execution-accuracy)
-
-Goal: a reproducible harness that measures the **result**, not the text. Catches regressions; fixes
-auto-redeploy via the CD already wired in First Deploy.
-
-- [ ] **1.27** 🎓 design (eval from scratch): write `eval/README.md` — what execution-accuracy is and why text-match is wrong for SQL.
-- [ ] **1.28** Ground-truth set: ~10–15 `(question → reference SQL / expected result)` pairs incl. a few off-topic/unanswerable. Stored as data (JSON/YAML) in `eval/`.
-- [ ] **1.29** Harness core: run each question through the agent, execute generated SQL, compare result to expected (order-insensitive). Report per-question pass/fail.
-- [ ] **1.30** Extra checks: (a) did SQL execute without error, (b) right tables used, (c) abstention on off-topic. Summary metrics printed.
-- [ ] **1.31** One script entrypoint to rerun the whole eval; baseline numbers recorded in README.
 
 ---
 
