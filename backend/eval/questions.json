@@ -1,0 +1,153 @@
+[
+  {
+    "id": "E1",
+    "difficulty": "easy",
+    "question": "How many production lines does the factory have?",
+    "reference_sql": "SELECT count(*) AS line_count FROM production_lines;",
+    "expected_result": [{ "line_count": 5 }],
+    "expected_tables": ["production_lines"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "E2",
+    "difficulty": "easy",
+    "question": "What are the names of all the work shifts?",
+    "reference_sql": "SELECT name FROM shifts ORDER BY start_time;",
+    "expected_result": [{ "name": "Morning" }, { "name": "Evening" }, { "name": "Night" }],
+    "expected_tables": ["shifts"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "M1",
+    "difficulty": "medium",
+    "question": "Which production line has accumulated the most unplanned downtime, measured in total minutes? Give the line and the total.",
+    "reference_sql": "SELECT pl.name, SUM(de.duration_minutes) AS total_unplanned_minutes FROM downtime_events de JOIN production_lines pl ON pl.id = de.line_id WHERE de.is_planned = false GROUP BY pl.name ORDER BY total_unplanned_minutes DESC LIMIT 1;",
+    "expected_result": [{ "name": "Assembly Line A", "total_unplanned_minutes": 7504 }],
+    "expected_tables": ["downtime_events", "production_lines"],
+    "order_sensitive": true,
+    "unanswerable": false
+  },
+  {
+    "id": "M2",
+    "difficulty": "medium",
+    "question": "How many work orders are currently in progress?",
+    "reference_sql": "SELECT count(*) AS in_progress FROM work_orders WHERE status = 'in_progress';",
+    "expected_result": [{ "in_progress": 18 }],
+    "expected_tables": ["work_orders"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "M3",
+    "difficulty": "medium",
+    "question": "Break down the total downtime minutes by reason code, from highest to lowest.",
+    "reference_sql": "SELECT reason_code, SUM(duration_minutes) AS total_minutes FROM downtime_events GROUP BY reason_code ORDER BY total_minutes DESC;",
+    "expected_result": [
+      { "reason_code": "breakdown", "total_minutes": 21990 },
+      { "reason_code": "planned_maintenance", "total_minutes": 15607 },
+      { "reason_code": "material_shortage", "total_minutes": 5938 },
+      { "reason_code": "setup_changeover", "total_minutes": 4960 }
+    ],
+    "expected_tables": ["downtime_events"],
+    "order_sensitive": true,
+    "unanswerable": false
+  },
+  {
+    "id": "H1",
+    "difficulty": "hard",
+    "question": "For each product category, what is the scrap rate — total scrap quantity divided by total produced quantity?",
+    "reference_sql": "SELECT p.category, round(SUM(po.scrap_quantity)::numeric / NULLIF(SUM(po.produced_quantity), 0), 4) AS scrap_rate FROM production_output po JOIN work_orders wo ON wo.id = po.work_order_id JOIN products p ON p.id = wo.product_id GROUP BY p.category ORDER BY p.category;",
+    "expected_result": [
+      { "category": "Contactors", "scrap_rate": 0.0379 },
+      { "category": "Control Units", "scrap_rate": 0.0407 },
+      { "category": "Motors", "scrap_rate": 0.0393 },
+      { "category": "Switchgear", "scrap_rate": 0.0393 },
+      { "category": "Transformers", "scrap_rate": 0.0394 }
+    ],
+    "expected_tables": ["production_output", "work_orders", "products"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "H2",
+    "difficulty": "hard",
+    "question": "Which product has the highest total number of defects? Give the product and the total.",
+    "reference_sql": "SELECT p.name, SUM(d.quantity) AS total_defects FROM defects d JOIN quality_inspections qi ON qi.id = d.inspection_id JOIN work_orders wo ON wo.id = qi.work_order_id JOIN products p ON p.id = wo.product_id GROUP BY p.name ORDER BY total_defects DESC LIMIT 1;",
+    "expected_result": [{ "name": "Type K Contactor", "total_defects": 1281 }],
+    "expected_tables": ["defects", "quality_inspections", "work_orders", "products"],
+    "order_sensitive": true,
+    "unanswerable": false
+  },
+  {
+    "id": "H3",
+    "difficulty": "hard",
+    "question": "What is the overall first-pass yield — total passed divided by total inspected — for products in the Motors category?",
+    "reference_sql": "SELECT round(SUM(qi.passed_quantity)::numeric / NULLIF(SUM(qi.inspected_quantity), 0), 4) AS first_pass_yield FROM quality_inspections qi JOIN work_orders wo ON wo.id = qi.work_order_id JOIN products p ON p.id = wo.product_id WHERE p.category = 'Motors';",
+    "expected_result": [{ "first_pass_yield": 0.9315 }],
+    "expected_tables": ["quality_inspections", "work_orders", "products"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "T1",
+    "difficulty": "trap",
+    "question": "Which machine has the most breakdowns? Give the machine and the number of breakdown events.",
+    "reference_sql": "SELECT m.name, count(*) AS breakdown_events FROM downtime_events de JOIN machines m ON m.id = de.machine_id WHERE de.reason_code = 'breakdown' GROUP BY m.name ORDER BY breakdown_events DESC LIMIT 1;",
+    "expected_result": [{ "name": "Tester A1", "breakdown_events": 10 }],
+    "expected_tables": ["downtime_events", "machines"],
+    "order_sensitive": true,
+    "unanswerable": false
+  },
+  {
+    "id": "T2",
+    "difficulty": "trap",
+    "question": "How many machines have never had a breakdown recorded?",
+    "reference_sql": "SELECT count(*) AS machines_without_breakdown FROM machines m WHERE NOT EXISTS (SELECT 1 FROM downtime_events de WHERE de.machine_id = m.id AND de.reason_code = 'breakdown');",
+    "expected_result": [{ "machines_without_breakdown": 1 }],
+    "expected_tables": ["machines", "downtime_events"],
+    "order_sensitive": false,
+    "unanswerable": false
+  },
+  {
+    "id": "T3",
+    "difficulty": "trap",
+    "question": "In June 2026, which production line had the most unplanned downtime minutes?",
+    "reference_sql": "SELECT pl.name, SUM(de.duration_minutes) AS total_unplanned_minutes FROM downtime_events de JOIN production_lines pl ON pl.id = de.line_id WHERE de.is_planned = false AND de.occurred_at >= '2026-06-01' AND de.occurred_at < '2026-07-01' GROUP BY pl.name ORDER BY total_unplanned_minutes DESC LIMIT 1;",
+    "expected_result": [{ "name": "Assembly Line A", "total_unplanned_minutes": 929 }],
+    "expected_tables": ["downtime_events", "production_lines"],
+    "order_sensitive": true,
+    "unanswerable": false
+  },
+  {
+    "id": "O1",
+    "difficulty": "offtopic",
+    "question": "What was the outdoor temperature at the factory last week?",
+    "reference_sql": null,
+    "expected_result": null,
+    "expected_tables": [],
+    "order_sensitive": false,
+    "unanswerable": true
+  },
+  {
+    "id": "O2",
+    "difficulty": "offtopic",
+    "question": "How many employees were hired in the last quarter?",
+    "reference_sql": null,
+    "expected_result": null,
+    "expected_tables": [],
+    "order_sensitive": false,
+    "unanswerable": true
+  },
+  {
+    "id": "O3",
+    "difficulty": "offtopic",
+    "question": "Which raw-material supplier delivered the most components this year?",
+    "reference_sql": null,
+    "expected_result": null,
+    "expected_tables": [],
+    "order_sensitive": false,
+    "unanswerable": true
+  }
+]
