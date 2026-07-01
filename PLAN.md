@@ -186,7 +186,7 @@ Vector store = **pgvector in the same Postgres** (Supabase ships it — no separ
 
 - [x] **2.1** Migration: enable `pgvector` extension + add the free-text source (`downtime_events.notes` or a `maintenance_logs` table w/ `description`) + seed realistic free-text. 🎓 SQL: extending the schema, enabling an extension.
 - [x] **2.2** 🎓 design: embeddings + vector search primer; pick a **small OpenAI embedding model** (verify current name/price live).
-- [ ] **2.3** Embedding pipeline: generate + store vectors in a pgvector column. 🎓 SQL: vector column + similarity operator (`<->`), an index on it.
+- [x] **2.3** Embedding pipeline: generate + store vectors in a pgvector column. 🎓 SQL: vector column + similarity operator (`<->`), an index on it.
 - [ ] **2.4** New tool `search_notes(query)` (semantic search) exposed to the agent alongside the SQL tools.
 - [ ] **2.5** Service/agent: let the model combine SQL results + semantic hits for questions that need both. 🎓 agent: multi-tool reasoning.
 - [ ] **2.6** Add a few hybrid questions to the eval set; rerun harness.

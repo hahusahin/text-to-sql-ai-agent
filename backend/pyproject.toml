@@ -18,6 +18,7 @@ envfile = ".env"
 [tool.poe.tasks]
 dev = "uvicorn app.main:app --reload"
 seed = "python -m db.seed.seed"
+embed = "python -m db.seed.embed_notes"
 migrate = "alembic upgrade head"
 downgrade = "alembic downgrade -1"
 eval = "python -m eval.harness"
