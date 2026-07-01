@@ -173,7 +173,7 @@ Keep the **single-question path still valid** (empty history) so the 1.7 eval ha
   per-question tool loop; why **stateless** (client sends history) beats a server session store here.
 - [x] **1.8.2** Frontend: keep a `messages[]` list and render the whole thread (question + answer +
   per-answer SQL/table disclosure), instead of replacing the last response. Send history with each ask.
-- [ ] **1.8.3** Frontend: chat layout polish — scrollable thread with the input pinned at the bottom;
+- [x] **1.8.3** Frontend: chat layout polish — scrollable thread with the input pinned at the bottom;
   switch the page shell to `100dvh`/`min-h-dvh` so it behaves on mobile (address-bar height). 🎓 design:
   why `dvh` over `vh` on mobile.
 
