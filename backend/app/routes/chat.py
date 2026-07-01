@@ -26,4 +26,4 @@ ServiceDep = Annotated[TextToSqlService, Depends(get_text_to_sql)]
 
 @router.post("/chat")
 async def chat(payload: ChatRequest, service: ServiceDep) -> ChatResponse:
-    return await service.answer_question(payload.question)
+    return await service.answer_question(payload.question, payload.history)

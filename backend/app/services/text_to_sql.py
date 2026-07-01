@@ -28,7 +28,7 @@ from typing import Any
 from app.core.sql_guard import UnsafeSqlError, ensure_safe_select
 from app.llm.client import OpenAIClient
 from app.llm.tools import TOOLS
-from app.models.chat import ChatResponse
+from app.models.chat import ChatResponse, Turn
 from app.repositories.sql_repository import QueryExecutionError, SqlRepository
 
 # Each pass of the loop is one model turn (one Responses call). A normal run is
@@ -81,8 +81,13 @@ class TextToSqlService:
         self._llm = llm
         self._repository = repository
 
-    async def answer_question(self, question: str) -> ChatResponse:
-        conversation: list[Any] = [{"role": "user", "content": question}]
+    async def answer_question(
+        self, question: str, history: list[Turn] | None = None
+    ) -> ChatResponse:
+        conversation: list[Any] = [
+            {"role": turn.role, "content": turn.content} for turn in (history or [])
+        ]
+        conversation.append({"role": "user", "content": question})
         last_sql = ""
         last_rows: list[dict[str, Any]] = []
 

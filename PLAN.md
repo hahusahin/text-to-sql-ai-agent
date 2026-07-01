@@ -168,7 +168,7 @@ can reference an earlier answer (e.g. *"list the lines"* → *"now show downtime
 Decided **after** First Deploy on purpose (ship the link first; this changes the `/chat` contract).
 Keep the **single-question path still valid** (empty history) so the 1.7 eval harness is unaffected.
 
-- [ ] **1.8.1** Backend: `ChatRequest` carries prior turns (a `messages` history); the agent loop seeds
+- [x] **1.8.1** Backend: `ChatRequest` carries prior turns (a `messages` history); the agent loop seeds
   the LLM conversation with them instead of starting empty. 🎓 agent: conversation memory vs the
   per-question tool loop; why **stateless** (client sends history) beats a server session store here.
 - [ ] **1.8.2** Frontend: keep a `messages[]` list and render the whole thread (question + answer +
