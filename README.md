@@ -4,21 +4,19 @@
 
 An **agentic text-to-SQL assistant** over a manufacturing database. Ask a plain-language question
 (Turkish or English) and an LLM inspects the schema, writes SQL, runs it **read-only** against the
-database, fixes its own query on error, and answers in plain language — and can reveal the exact SQL it
-ran as proof.
+database, fixes its own query on error, and answers in plain language.
 
 ## What it does
 
-You ask something like *"Which production line had the most unplanned downtime last month?"*. Instead of
+You ask something like _"Which production line had the most unplanned downtime last month?"_. Instead of
 one-shot SQL, the model works **agentically** with two tools:
 
 - `get_schema()` — inspect the live tables and columns
 - `run_query(sql)` — execute a read-only `SELECT`
 
-It runs a loop: call a tool → read the result *or the database error* → correct itself → answer. Seeing
+It runs a loop: call a tool → read the result _or the database error_ → correct itself → answer. Seeing
 the real error (e.g. `column "duration" does not exist`) is exactly what lets it fix a bad query and
-retry. Each answer ships with the SQL that produced it (hidden by default, expandable) and the result
-rows, so you can verify the answer came from real data.
+retry. Each answer ships with the SQL that produced it and the result rows, so you can verify the answer came from real data.
 
 ## The data — a manufacturing factory
 
@@ -40,37 +38,22 @@ Sample questions it can answer:
 - "During the Night shift, which machines caused the most downtime minutes?"
 - "Which products have the highest defect rate, and what are their most common defect types?"
 
-## Architecture
-
-```mermaid
-flowchart LR
-    U["Browser"] --> V["Vercel<br/>Next.js + thin gateway"]
-    V -->|"/chat + X-API-Key"| B["HF Space<br/>FastAPI agent loop"]
-    B <-->|"tool calls"| AI["OpenAI<br/>native tool calling"]
-    B -->|"read-only SELECT"| DB[("Supabase<br/>Postgres")]
-```
-
-Two services only: the Postgres database plays the role of "the company's existing system", and the
-FastAPI service adds the natural-language layer on top of it — no separate business backend. The Next.js
-`/api/chat` route is a thin gateway (adds the shared API key, proxies to the backend); all logic lives in
-the FastAPI service.
-
 ## Stack
 
-| Layer | Tech |
-|---|---|
-| Frontend | Next.js 16 (App Router, TypeScript, Tailwind, shadcn/ui) + thin gateway API route |
-| Backend | Python / FastAPI (layered, async), OpenAI native tool calling — hand-written agent loop, no framework |
-| Database | PostgreSQL — Docker locally, Supabase in production |
-| Tooling | Poetry, asyncpg, Alembic (raw-SQL migrations, no ORM) |
-| Deploy | Vercel (frontend) · Hugging Face Spaces (backend, Docker) · Supabase (Postgres) |
+| Layer    | Tech                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------- |
+| Frontend | Next.js 16 (App Router, TypeScript, Tailwind, shadcn/ui) + thin gateway API route              |
+| Backend  | Python / FastAPI (layered), OpenAI native tool calling — hand-written agent loop, no framework |
+| Database | PostgreSQL — Docker locally, Supabase in production                                            |
+| Tooling  | Poetry, asyncpg, Alembic (raw-SQL migrations, no ORM)                                          |
+| Deploy   | Vercel (frontend) · Hugging Face Spaces (backend, Docker) · Supabase (Postgres)                |
 
 ## Guardrails
 
 The model writes the SQL, so a query could be wrong or unsafe. Independent layers (defense in depth) keep
 the database protected:
 
-- **Read-only access** — the app connects as a database user that can *only read*. Even if the model
+- **Read-only access** — the app connects as a database user that can _only read_. Even if the model
   emitted `DROP TABLE`, the database itself would reject it. This is the main safeguard.
 - **Query validation** — every generated query must be a single read-only `SELECT`; risky commands are
   blocked and a row limit is always applied.
@@ -79,7 +62,7 @@ the database protected:
 
 ## Evaluation
 
-A model can emit SQL that *runs fine but returns the wrong number*, so the agent is graded on
+A model can emit SQL that _runs fine but returns the wrong number_, so the agent is graded on
 **execution accuracy** — run the generated query and compare its **result** to a known-correct one, not
 its text (there are endless correct ways to write the same query). A reproducible harness runs 17
 tiered questions (easy → very-hard, plus off-topic ones the agent must **decline**) through the real
@@ -88,9 +71,7 @@ an **LLM-as-judge** — whether it abstained on the unanswerable ones.
 
 Baseline (`gpt-5.4-mini`): **execution accuracy 14/14** (all tiers, including window-function and
 correlated-subquery questions); the soft spot is **abstention (2–3/3)** — the agent occasionally forces
-an off-topic question onto the schema instead of declining. Runs are cached so grading can be replayed
-for free (`poe eval` to run, `poe eval-regrade` to re-score offline). Details:
-**[backend/eval/README.md](backend/eval/README.md)**.
+an off-topic question onto the schema instead of declining.
 
 ## Run locally
 
