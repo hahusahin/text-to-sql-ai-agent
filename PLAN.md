@@ -157,7 +157,7 @@ auto-redeploy via the CD already wired in First Deploy.
 - [x] **1.29a** Harness comparison logic (result normalization + match). 🎓 design: value-based, order- and type-insensitive.
 - [x] **1.29b** Harness core: run each question through the agent, execute generated SQL, compare result to expected (order-insensitive). Report per-question pass/fail.
 - [x] **1.30** Extra checks: (a) did SQL execute without error, (b) right tables used, (c) abstention on off-topic. Summary metrics printed.
-- [ ] **1.31** One script entrypoint to rerun the whole eval; baseline numbers recorded in README.
+- [x] **1.31** One script entrypoint to rerun the whole eval; baseline numbers recorded in README.
 
 ---
 

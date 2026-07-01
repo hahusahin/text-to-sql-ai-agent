@@ -27,7 +27,9 @@ Run it from ``backend/`` with:  ``poetry run python -m eval.harness``
 import asyncio
 import json
 import re
+import sys
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 
 from openai import AsyncOpenAI
@@ -39,6 +41,7 @@ from app.services.text_to_sql import TextToSqlService
 from eval.comparison import results_match
 
 _QUESTIONS_PATH = Path(__file__).parent / "questions.json"
+_LATEST_RUN_PATH = Path(__file__).parent / "runs" / "latest.json"
 _TIER_ORDER = ["easy", "medium", "hard", "veryhard"]
 
 _JUDGE_INSTRUCTIONS = (
@@ -65,6 +68,59 @@ class Result:
 
 def _load_questions() -> list[dict]:
     return json.loads(_QUESTIONS_PATH.read_text(encoding="utf-8"))
+
+
+def _json_default(value: object) -> object:
+    """Make a row value JSON-serializable while keeping numbers comparable.
+
+    asyncpg hands back ``Decimal`` for numeric columns and ``datetime`` for
+    timestamps. We keep Decimals as floats (so a re-grade still compares them
+    numerically) and stringify everything else json can't handle.
+    """
+    if isinstance(value, Decimal):
+        return float(value)
+    return str(value)
+
+
+def _save_run(results: list["Result"]) -> None:
+    """Persist the agent's output per question so grading can be replayed for free.
+
+    Running the agent hits OpenAI (slow, costs credit); grading is pure. Saving the
+    responses lets us re-grade after changing the comparison or metrics — as we did
+    repeatedly building this harness — without paying to re-run the agent.
+    """
+    payload = [
+        {
+            "id": r.question["id"],
+            "answer": r.answer,
+            "sql": r.sql,
+            "rows": r.rows,
+            "error": r.error,
+            "abstained": r.abstained,
+        }
+        for r in results
+    ]
+    _LATEST_RUN_PATH.parent.mkdir(exist_ok=True)
+    _LATEST_RUN_PATH.write_text(
+        json.dumps(payload, indent=2, default=_json_default, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def _load_run(questions: list[dict]) -> list["Result"]:
+    """Rebuild results from the last saved run, pairing each with its question."""
+    saved = {row["id"]: row for row in json.loads(_LATEST_RUN_PATH.read_text(encoding="utf-8"))}
+    return [
+        Result(
+            q,
+            answer=saved[q["id"]]["answer"],
+            sql=saved[q["id"]]["sql"],
+            rows=saved[q["id"]]["rows"],
+            error=saved[q["id"]]["error"],
+            abstained=saved[q["id"]]["abstained"],
+        )
+        for q in questions
+    ]
 
 
 async def _build_service() -> tuple[TextToSqlService, AsyncpgRepository]:
@@ -178,8 +234,17 @@ async def run_eval() -> None:
                 )
             )
 
+    _save_run(results)
     _report(results)
 
 
+def regrade() -> None:
+    """Re-report the last saved run without touching OpenAI or the database."""
+    _report(_load_run(_load_questions()))
+
+
 if __name__ == "__main__":
-    asyncio.run(run_eval())
+    if "--regrade" in sys.argv:
+        regrade()
+    else:
+        asyncio.run(run_eval())

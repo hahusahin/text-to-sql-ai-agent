@@ -39,3 +39,6 @@ Thumbs.db
 
 # ---- Docker / DB local data ----
 pgdata/
+
+# ---- Eval run artifacts (regenerated each run; baseline lives in eval/README) ----
+backend/eval/runs/

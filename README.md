@@ -77,6 +77,21 @@ the database protected:
 - **Query timeout** — the database cancels any query that runs too long, so one heavy query can't tie up
   the service.
 
+## Evaluation
+
+A model can emit SQL that *runs fine but returns the wrong number*, so the agent is graded on
+**execution accuracy** — run the generated query and compare its **result** to a known-correct one, not
+its text (there are endless correct ways to write the same query). A reproducible harness runs 17
+tiered questions (easy → very-hard, plus off-topic ones the agent must **decline**) through the real
+agent against the local database, and also checks whether the SQL ran, hit the right tables, and — via
+an **LLM-as-judge** — whether it abstained on the unanswerable ones.
+
+Baseline (`gpt-5.4-mini`): **execution accuracy 14/14** (all tiers, including window-function and
+correlated-subquery questions); the soft spot is **abstention (2–3/3)** — the agent occasionally forces
+an off-topic question onto the schema instead of declining. Runs are cached so grading can be replayed
+for free (`poe eval` to run, `poe eval-regrade` to re-score offline). Details:
+**[backend/eval/README.md](backend/eval/README.md)**.
+
 ## Run locally
 
 Postgres runs in Docker; the apps run on the host for fast hot-reload.

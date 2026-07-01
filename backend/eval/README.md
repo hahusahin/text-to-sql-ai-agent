@@ -71,16 +71,54 @@ match":
   result.
 - **Abstention on off-topic questions.** Our set deliberately includes questions the database *can't*
   answer ("What's the weather?", "How many employees quit last year?" — there's no such table). The
-  correct behavior there is to **decline**, not to invent a query. For these, "pass" means the agent
-  *abstained* — it did not fabricate an answer.
+  correct behavior there is to **decline**, not to invent a query. Whether the agent declined is a
+  *semantic* judgement — it may probe with a query first and may reply in any language — so a small
+  separate LLM call (an **LLM-as-judge**) reads the answer text and decides. "Pass" means the agent
+  abstained; a "fail" is the agent fabricating a data answer for something the schema can't support.
 
 ## How it's laid out
 
 - `README.md` — this file (the *why*).
-- `questions.*` — the ground-truth set: `(question → reference SQL / expected result)` pairs, including
-  the off-topic ones. Data, not code, so questions are easy to add (Task 1.28).
-- the harness — runs each question through the real agent, executes the SQL, compares results, and
-  prints per-question pass/fail plus summary metrics (Tasks 1.29–1.31).
+- `questions.json` — the ground-truth set: `(question → reference SQL / expected result)` pairs,
+  including the off-topic ones. Data, not code, so questions are easy to add.
+- `comparison.py` — the result-set comparison (normalization + match). Pure logic, no I/O.
+- `harness.py` — the runner: drives the agent in-process, grades, and prints metrics.
+- `runs/latest.json` — the last run's raw agent output (git-ignored; regenerated each run).
 
 The harness runs the **actual agent loop** against the **actual database** — not a mock. That's the
 point: we're measuring the system a user would hit, end to end.
+
+## Running it
+
+From `backend/`:
+
+```
+poetry run poe eval           # run the agent on every question, grade, and save the run
+poetry run poe eval-regrade   # re-grade the last saved run — no OpenAI, no database, free
+```
+
+Running the agent is the expensive part (real OpenAI calls); grading is pure. So `eval` saves each
+question's answer/SQL/rows to `runs/latest.json`, and `eval-regrade` replays the grading over that file.
+When you change the comparison or the metrics — not the agent — re-grade instead of paying to re-run.
+
+**The eval always targets the local database** (`EVAL_DATABASE_URL`, defaulting to the local read-only
+role), never the deployed one: the ground-truth values were captured from local data, and the deployed
+DB was seeded separately, so its numbers differ. Start it with `docker compose up -d` and make sure
+migrations + seed have run.
+
+## Baseline
+
+Model `gpt-5.4-mini`, 17 questions (14 answerable + 3 off-topic), local DB:
+
+| Metric | Result |
+| --- | --- |
+| Execution accuracy | 14/14 (easy 2/2 · medium 3/3 · hard 3/3 · veryhard 3/3) |
+| SQL executed | 14/14 |
+| Correct tables used | 14/14 |
+| Abstention (off-topic) | 2–3/3 |
+
+The agent is strong on the answerable set — the traps and the very-hard questions (window function,
+correlated-subquery threshold, month bucketing) all pass. The one soft spot is **abstention**: it's
+non-deterministic (2/3 on some runs, 3/3 on others) because the agent occasionally forces an off-topic
+question onto the schema — e.g. answering "which supplier delivered the most?" by naming a *product* —
+instead of declining. That variance is a real property of the agent, left visible rather than hidden.
