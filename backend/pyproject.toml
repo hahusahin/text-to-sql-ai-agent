@@ -9,6 +9,12 @@ dependencies = ["fastapi (>=0.138.1,<0.139.0)", "uvicorn[standard] (>=0.49.0,<0.
 [tool.poetry]
 package-mode = false
 
+[tool.poe]
+# Load .env so tasks can reference vars (e.g. ${PROD_DATABASE_URL}). pydantic
+# still reads .env too; OS env set by poe wins over the .env file, which is how
+# the *-prod override below redirects the target.
+envfile = ".env"
+
 [tool.poe.tasks]
 dev = "uvicorn app.main:app --reload"
 seed = "python -m db.seed.seed"
@@ -16,6 +22,16 @@ migrate = "alembic upgrade head"
 downgrade = "alembic downgrade -1"
 eval = "python -m eval.harness"
 eval-regrade = "python -m eval.harness --regrade"
+
+# Run migrations against PRODUCTION (Supabase), opt-in only. Overrides
+# DATABASE_URL from PROD_DATABASE_URL for this task alone, so `migrate`/`seed`
+# stay safely local. The banner makes the target impossible to miss.
+[tool.poe.tasks.migrate-prod]
+sequence = [
+  { cmd = "python -c \"import os,urllib.parse as u; print('>>> Alembic target = PRODUCTION:', u.urlparse(os.environ['DATABASE_URL']).hostname, '- Ctrl+C now to abort.')\"" },
+  { cmd = "alembic upgrade head" },
+]
+env = { DATABASE_URL = "${PROD_DATABASE_URL}" }
 
 [dependency-groups]
 dev = [

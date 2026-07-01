@@ -58,6 +58,58 @@ DURATION_RANGES = {
     "planned_maintenance": (60, 240),
 }
 
+# Fraction of downtime events that carry an operator note; the rest stay NULL
+# (not every stop is annotated in real life, and it exercises the Phase 2
+# embedding pipeline's handling of missing text).
+NOTE_PROBABILITY = 0.85
+
+# Free-text operator notes, grouped by reason_code so the wording stays coherent
+# with the structured column. Deliberately varied and full of synonyms
+# ("oil leak" / "hydraulic fluid" / "seepage") so Phase 2 semantic search can
+# beat a brittle keyword LIKE, which the coarse reason_code enum cannot express.
+NOTE_TEMPLATES: dict[str, list[str]] = {
+    "breakdown": [
+        "Lost hydraulic pressure; found a leaking seal and replaced the O-ring.",
+        "Oil seepage around the main cylinder, topped up the fluid and tightened the fittings.",
+        "Hydraulic fluid leaking onto the floor, isolated the unit until the hose was swapped.",
+        "Motor overheated and tripped the thermal overload; let it cool and reset the breaker.",
+        "Electrical fault on the control board, swapped the PLC module.",
+        "Bearing seized on the spindle; replaced the bearing and re-greased the shaft.",
+        "Coolant pump failed, no flow to the tool, pump replaced.",
+        "Drive belt snapped mid-run, fitted a new belt and re-tensioned it.",
+        "Sensor gave false readings, recalibrated and cleaned the probe.",
+        "Pneumatic actuator stuck, air line was blocked, cleared and re-seated it.",
+    ],
+    "setup_changeover": [
+        "Changed tooling for the next product batch.",
+        "Retooled the die for a larger panel size.",
+        "Swapped fixtures to switch to a different contactor model.",
+        "Recalibrated torque settings after the product change.",
+        "Loaded a new program and ran a first-off check for the incoming order.",
+    ],
+    "material_shortage": [
+        "Held up waiting on a copper busbar delivery from the warehouse.",
+        "Ran out of terminal blocks, paused until stock arrived.",
+        "Insulation sheets not delivered on time, the line idled.",
+        "Missing coil wire, waited for replenishment from stores.",
+        "Short on labels, packaging held until supply came in.",
+    ],
+    "planned_maintenance": [
+        "Scheduled lubrication and general inspection.",
+        "Quarterly preventive maintenance as per the plan.",
+        "Replaced worn carbon brushes on schedule.",
+        "Routine firmware update and self-test.",
+        "Planned filter change and cleaning.",
+    ],
+}
+
+
+def _note_for(reason_code: str) -> str | None:
+    """Pick a realistic operator note for a downtime event, or None (unannotated)."""
+    if random.random() > NOTE_PROBABILITY:
+        return None
+    return random.choice(NOTE_TEMPLATES[reason_code])
+
 PRODUCTS: list[tuple[str, str]] = [
     ("Type C Contactor", "Contactors"),
     ("Type K Contactor", "Contactors"),
@@ -354,6 +406,7 @@ def seed_downtime_events(cur, machines_by_line: dict[int, list[int]], shift_ids:
                 "is_planned": reason_code == "planned_maintenance",
                 "duration_minutes": random.randint(*DURATION_RANGES[reason_code]),
                 "occurred_at": _random_timestamp_within_window(),
+                "notes": _note_for(reason_code),
             }
         )
     specs.sort(key=lambda s: s["occurred_at"])
@@ -361,10 +414,10 @@ def seed_downtime_events(cur, machines_by_line: dict[int, list[int]], shift_ids:
     for s in specs:
         cur.execute(
             "INSERT INTO downtime_events "
-            "(line_id, machine_id, shift_id, reason_code, is_planned, duration_minutes, occurred_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s);",
+            "(line_id, machine_id, shift_id, reason_code, is_planned, duration_minutes, occurred_at, notes) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s);",
             (s["line_id"], s["machine_id"], s["shift_id"], s["reason_code"],
-             s["is_planned"], s["duration_minutes"], s["occurred_at"]),
+             s["is_planned"], s["duration_minutes"], s["occurred_at"], s["notes"]),
         )
     return DOWNTIME_EVENT_COUNT
 
