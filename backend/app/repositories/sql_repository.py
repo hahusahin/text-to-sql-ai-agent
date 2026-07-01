@@ -36,6 +36,33 @@ _CONSTRAINTS_SQL = """
 """
 
 
+# Semantic search over the free-text operator notes. ORDER BY the cosine-distance
+# operator (<=>) against the query vector, nearest first; the HNSW index on
+# `embedding` serves this ordering. We JOIN production_lines so each hit carries
+# the line it happened on — the note alone ("oil seepage...") can't answer "which
+# LINE had oil leaks". Rows without a note (embedding IS NULL) are excluded. The
+# query vector arrives as pgvector's text form and is cast with $1::vector, so we
+# need no asyncpg codec for the type.
+_SEARCH_NOTES_SQL = """
+    SELECT
+        de.occurred_at,
+        de.reason_code,
+        de.duration_minutes,
+        pl.name AS line_name,
+        de.notes
+    FROM downtime_events de
+    JOIN production_lines pl ON pl.id = de.line_id
+    WHERE de.embedding IS NOT NULL
+    ORDER BY de.embedding <=> $1::vector
+    LIMIT $2
+"""
+
+
+def _to_pgvector_literal(embedding: list[float]) -> str:
+    """Render a vector as pgvector's text form, e.g. ``[0.1,0.2,0.3]``."""
+    return "[" + ",".join(str(x) for x in embedding) + "]"
+
+
 class QueryExecutionError(Exception):
     """Raised when the database rejects or fails to run a query.
 
@@ -66,6 +93,17 @@ class SqlRepository(Protocol):
 
     async def get_schema_text(self) -> str:
         """Introspect the live database and return its schema as LLM-readable text."""
+        ...
+
+    async def search_notes(
+        self, embedding: list[float], limit: int
+    ) -> list[dict[str, Any]]:
+        """Return the downtime events whose note is most similar to ``embedding``.
+
+        ``embedding`` is the query vector; rows come back nearest-first by cosine
+        distance, each carrying its downtime context (line, time, reason) so the
+        answer can be grounded, not just the note text.
+        """
         ...
 
 
@@ -110,6 +148,18 @@ class AsyncpgRepository(SqlRepository):
         try:
             async with self._pool.acquire() as connection:
                 records = await connection.fetch(sql)
+        except asyncpg.PostgresError as exc:
+            raise QueryExecutionError(str(exc)) from exc
+        return [dict(record) for record in records]
+
+    async def search_notes(
+        self, embedding: list[float], limit: int
+    ) -> list[dict[str, Any]]:
+        try:
+            async with self._pool.acquire() as connection:
+                records = await connection.fetch(
+                    _SEARCH_NOTES_SQL, _to_pgvector_literal(embedding), limit
+                )
         except asyncpg.PostgresError as exc:
             raise QueryExecutionError(str(exc)) from exc
         return [dict(record) for record in records]

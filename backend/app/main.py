@@ -29,7 +29,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.database_url_readonly,
         statement_timeout_ms=settings.db_statement_timeout_ms,
     )
-    llm = OpenAIClient(api_key=settings.openai_api_key, model=settings.openai_model)
+    llm = OpenAIClient(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+        embedding_model=settings.openai_embedding_model,
+    )
     app.state.text_to_sql = TextToSqlService(llm=llm, repository=repository)
     try:
         yield

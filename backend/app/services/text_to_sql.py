@@ -37,6 +37,10 @@ from app.repositories.sql_repository import QueryExecutionError, SqlRepository
 # calling tools without ever settling on an answer; it bounds both latency and cost.
 _MAX_STEPS = 6
 
+# How many nearest notes search_notes hands back. Enough for the model to see a
+# theme and its spread across lines, without flooding the context with near-dupes.
+_NOTES_SEARCH_LIMIT = 8
+
 
 @dataclass
 class _ToolResult:
@@ -59,6 +63,8 @@ Work in steps:
 2. Write a single read-only SELECT and run it with run_query.
 3. If run_query returns an error instead of rows, read the error text and call run_query again with a corrected query.
 4. Once you have the data you need, reply in plain language.
+
+Downtime events also carry a free-text operator note describing what happened. The structured reason_code column has only four coarse values (breakdown, setup_changeover, material_shortage, planned_maintenance) and cannot express finer themes like "oil leaks" or "hydraulic problems". When a question is about what operators described in those notes, call search_notes with a short description of the theme. You can combine tools: use search_notes to find the relevant downtime events, then run_query to count or aggregate them.
 
 Rules:
 - Keep every query to a single SELECT with a LIMIT of at most 100 rows.
@@ -138,6 +144,8 @@ class TextToSqlService:
             return _ToolResult(output=await self._repository.get_schema_text())
         if name == "run_query":
             return await self._run_query_tool(arguments)
+        if name == "search_notes":
+            return await self._run_search_notes_tool(arguments)
         return _ToolResult(output=f"Unknown tool: {name!r}.")
 
     async def _run_query_tool(self, arguments: str) -> _ToolResult:
@@ -158,3 +166,23 @@ class TextToSqlService:
 
         output = json.dumps(rows, default=str, ensure_ascii=False)
         return _ToolResult(output=output, sql=safe_sql, rows=rows)
+
+    async def _run_search_notes_tool(self, arguments: str) -> _ToolResult:
+        """Embed the model's query and return the nearest downtime notes as JSON.
+
+        Unlike run_query this doesn't set ``sql``/``rows``: the retrieval isn't a
+        query the user could inspect, and it isn't the SQL proof the UI shows. The
+        notes are only fed back into the conversation for the model to reason over.
+        """
+        try:
+            query = json.loads(arguments)["query"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return _ToolResult('Invalid arguments: expected JSON of the form {"query": "..."}.')
+
+        try:
+            embedding = await self._llm.embed_query(query)
+            rows = await self._repository.search_notes(embedding, _NOTES_SEARCH_LIMIT)
+        except QueryExecutionError as exc:
+            return _ToolResult(f"Database error: {exc}")
+
+        return _ToolResult(output=json.dumps(rows, default=str, ensure_ascii=False))

@@ -59,5 +59,35 @@ RUN_QUERY_TOOL = {
     },
 }
 
-TOOLS = [GET_SCHEMA_TOOL, RUN_QUERY_TOOL]
+SEARCH_NOTES_TOOL = {
+    "type": "function",
+    "name": "search_notes",
+    "description": (
+        "Semantic search over operators' free-text notes on downtime events. Pass a "
+        "short natural-language description of a problem or theme (e.g. 'oil or "
+        "hydraulic leaks', 'waiting on materials', 'electrical control faults') and "
+        "it returns the most similar downtime notes, each with its production line, "
+        "time, reason_code and duration. Use this when the question is about WHAT "
+        "operators described — symptoms, causes or themes that the structured "
+        "reason_code column (only four coarse categories: breakdown, "
+        "setup_changeover, material_shortage, planned_maintenance) cannot express. "
+        "For counts, sums, averages or filters over structured columns, use "
+        "run_query instead. The two can be combined: search_notes to find the "
+        "relevant events, run_query to aggregate. Results are ranked by similarity, "
+        "so treat weaker matches with caution and read each note before relying on it."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "A natural-language description of the notes to find.",
+            },
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    },
+}
+
+TOOLS = [GET_SCHEMA_TOOL, RUN_QUERY_TOOL, SEARCH_NOTES_TOOL]
 """The full catalogue, ready to pass as ``tools=`` to ``responses.create``."""

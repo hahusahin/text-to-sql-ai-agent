@@ -20,15 +20,18 @@ from openai.types.responses import Response
 
 
 class OpenAIClient:
-    """An OpenAI Responses-API client bound to one model.
+    """This app's OpenAI client: Responses calls for the agent, embeddings for search.
 
-    Created once at startup and reused; the underlying ``AsyncOpenAI`` keeps its
-    own connection pool, so a single instance serves every request.
+    Bound to a chat model (for :meth:`respond`) and an embedding model (for
+    :meth:`embed_query`). Created once at startup and reused; the underlying
+    ``AsyncOpenAI`` keeps its own connection pool, so a single instance serves
+    every request.
     """
 
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(self, api_key: str, model: str, embedding_model: str) -> None:
         self._client = AsyncOpenAI(api_key=api_key, max_retries=2)
         self._model = model
+        self._embedding_model = embedding_model
 
     async def respond(
         self,
@@ -52,3 +55,16 @@ class OpenAIClient:
             input=input_items,
             tools=tools,
         )
+
+    async def embed_query(self, text: str) -> list[float]:
+        """Embed one string into a vector for semantic search.
+
+        Uses the embedding model (a different model from the chat one), so the
+        query vector shares the same space as the note vectors stored by the
+        offline pipeline — only vectors from the same model are comparable. The
+        agent calls this per question, so it's one short async embeddings request.
+        """
+        response = await self._client.embeddings.create(
+            model=self._embedding_model, input=text
+        )
+        return response.data[0].embedding
