@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { dictionaries, type Language } from "@/i18n";
-import type { ChatResponse } from "@/lib/types";
+import type { ChatMessage, ChatResponse, Turn } from "@/lib/types";
 
 function formatCell(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -57,10 +57,42 @@ function ResultTable({ rows, noRowsLabel }: { rows: ChatResponse["rows"]; noRows
   );
 }
 
+function AssistantMessage({
+  message,
+  labels,
+}: {
+  message: Extract<ChatMessage, { role: "assistant" }>;
+  labels: { showSql: string; noRows: string };
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border p-4 text-sm whitespace-pre-wrap">
+        {message.content}
+      </div>
+
+      {message.sql && (
+        <Collapsible className="space-y-2">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm">
+              {labels.showSql}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3">
+            <pre className="overflow-x-auto rounded-lg border bg-muted p-4 text-xs">
+              {message.sql}
+            </pre>
+            <ResultTable rows={message.rows} noRowsLabel={labels.noRows} />
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [language, setLanguage] = useState<Language>("tr");
   const [question, setQuestion] = useState("");
-  const [response, setResponse] = useState<ChatResponse | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -70,20 +102,29 @@ export default function Home() {
     const trimmed = raw.trim();
     if (!trimmed || isLoading) return;
 
-    setIsLoading(true);
+    // Prior turns become the history the backend seeds its conversation with.
+    // Built from the messages already on screen, so it excludes this new question
+    // (the backend appends that itself). Only role/content go — not sql/rows.
+    const history: Turn[] = messages.map((m) => ({ role: m.role, content: m.content }));
+
+    setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
+    setQuestion("");
     setError(null);
-    setResponse(null);
+    setIsLoading(true);
 
     try {
       const httpResponse = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({ question: trimmed, history }),
       });
       if (!httpResponse.ok) throw new Error("Request failed");
 
       const data: ChatResponse = await httpResponse.json();
-      setResponse(data);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: data.answer, sql: data.sql, rows: data.rows },
+      ]);
     } catch {
       setError(t.error);
     } finally {
@@ -101,7 +142,7 @@ export default function Home() {
     submitQuestion(example);
   }
 
-  const showEmptyState = !response && !error && !isLoading;
+  const showEmptyState = messages.length === 0 && !error && !isLoading;
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-12">
@@ -157,31 +198,27 @@ export default function Home() {
         </div>
       )}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {response && (
-        <div className="space-y-4">
-          <div className="rounded-lg border p-4 text-sm whitespace-pre-wrap">
-            {response.answer}
-          </div>
-
-          {response.sql && (
-            <Collapsible className="space-y-2">
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm">
-                  {t.showSql}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-3">
-                <pre className="overflow-x-auto rounded-lg border bg-muted p-4 text-xs">
-                  {response.sql}
-                </pre>
-                <ResultTable rows={response.rows} noRowsLabel={t.noRows} />
-              </CollapsibleContent>
-            </Collapsible>
+      {messages.length > 0 && (
+        <div className="space-y-6">
+          {messages.map((message, index) =>
+            message.role === "user" ? (
+              <p key={index} className="text-sm font-medium">
+                {message.content}
+              </p>
+            ) : (
+              <AssistantMessage
+                key={index}
+                message={message}
+                labels={{ showSql: t.showSql, noRows: t.noRows }}
+              />
+            ),
           )}
         </div>
       )}
+
+      {isLoading && <p className="text-sm text-muted-foreground">{t.askingButton}</p>}
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </main>
   );
 }

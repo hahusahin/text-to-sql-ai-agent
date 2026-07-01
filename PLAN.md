@@ -171,7 +171,7 @@ Keep the **single-question path still valid** (empty history) so the 1.7 eval ha
 - [x] **1.8.1** Backend: `ChatRequest` carries prior turns (a `messages` history); the agent loop seeds
   the LLM conversation with them instead of starting empty. 🎓 agent: conversation memory vs the
   per-question tool loop; why **stateless** (client sends history) beats a server session store here.
-- [ ] **1.8.2** Frontend: keep a `messages[]` list and render the whole thread (question + answer +
+- [x] **1.8.2** Frontend: keep a `messages[]` list and render the whole thread (question + answer +
   per-answer SQL/table disclosure), instead of replacing the last response. Send history with each ask.
 - [ ] **1.8.3** Frontend: chat layout polish — scrollable thread with the input pinned at the bottom;
   switch the page shell to `100dvh`/`min-h-dvh` so it behaves on mobile (address-bar height). 🎓 design:
