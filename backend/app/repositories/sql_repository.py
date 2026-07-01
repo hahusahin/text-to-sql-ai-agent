@@ -40,11 +40,14 @@ _CONSTRAINTS_SQL = """
 # operator (<=>) against the query vector, nearest first; the HNSW index on
 # `embedding` serves this ordering. We JOIN production_lines so each hit carries
 # the line it happened on — the note alone ("oil seepage...") can't answer "which
-# LINE had oil leaks". Rows without a note (embedding IS NULL) are excluded. The
-# query vector arrives as pgvector's text form and is cast with $1::vector, so we
-# need no asyncpg codec for the type.
+# LINE had oil leaks". We also return `id` so the agent can aggregate exactly over
+# the matched events (run_query with WHERE id IN (...)) instead of re-searching the
+# table with brittle keyword LIKEs. Rows without a note (embedding IS NULL) are
+# excluded. The query vector arrives as pgvector's text form and is cast with
+# $1::vector, so we need no asyncpg codec for the type.
 _SEARCH_NOTES_SQL = """
     SELECT
+        de.id,
         de.occurred_at,
         de.reason_code,
         de.duration_minutes,

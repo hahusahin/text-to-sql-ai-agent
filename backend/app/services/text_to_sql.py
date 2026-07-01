@@ -37,9 +37,11 @@ from app.repositories.sql_repository import QueryExecutionError, SqlRepository
 # calling tools without ever settling on an answer; it bounds both latency and cost.
 _MAX_STEPS = 6
 
-# How many nearest notes search_notes hands back. Enough for the model to see a
-# theme and its spread across lines, without flooding the context with near-dupes.
-_NOTES_SEARCH_LIMIT = 8
+# How many nearest notes search_notes hands back. Set wider than a glance needs
+# because the model aggregates over the returned events (WHERE id IN ...) to answer
+# "how many / how much" for a theme: too small and it would undercount. Still
+# bounded, so a whole-theme count stays approximate — the model is told to say so.
+_NOTES_SEARCH_LIMIT = 20
 
 
 @dataclass
@@ -64,7 +66,9 @@ Work in steps:
 3. If run_query returns an error instead of rows, read the error text and call run_query again with a corrected query.
 4. Once you have the data you need, reply in plain language.
 
-Downtime events also carry a free-text operator note describing what happened. The structured reason_code column has only four coarse values (breakdown, setup_changeover, material_shortage, planned_maintenance) and cannot express finer themes like "oil leaks" or "hydraulic problems". When a question is about what operators described in those notes, call search_notes with a short description of the theme. You can combine tools: use search_notes to find the relevant downtime events, then run_query to count or aggregate them.
+Downtime events also carry a free-text operator note describing what happened. The structured reason_code column has only four coarse values (breakdown, setup_changeover, material_shortage, planned_maintenance) and cannot express finer themes like "oil leaks" or "hydraulic problems". When a question is about what operators described in those notes, call search_notes with a short description of the theme.
+
+To count or aggregate a note theme, combine the tools this way: first call search_notes to find the relevant events, then call run_query filtering on the id values it returned (WHERE id IN (...)) to compute exact totals. Do NOT match the theme with keyword patterns like notes ILIKE '%oil%': operators use paraphrases ("seepage", "fluid everywhere") that keywords miss and unrelated wording they wrongly catch — avoiding exactly that is why search_notes exists. search_notes is ranked by similarity and returns only a bounded number of the closest notes: read those notes and use only the ids whose note genuinely fits the theme (the farthest ones often do not), and because the list is capped, state that any whole-theme count or total is approximate rather than giving it as an exact figure.
 
 Rules:
 - Keep every query to a single SELECT with a LIMIT of at most 100 rows.
