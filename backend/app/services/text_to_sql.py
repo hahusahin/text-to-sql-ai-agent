@@ -58,6 +58,7 @@ class _ToolResult:
     sql: str | None = None
     rows: list[dict[str, Any]] | None = None
 
+
 _AGENT_INSTRUCTIONS = """You are a data analyst answering questions about a manufacturing factory's PostgreSQL database. Answer using ONLY data you read from that database, by using the tools you are given.
 
 Work in steps:
@@ -156,7 +157,9 @@ class TextToSqlService:
         try:
             sql = json.loads(arguments)["sql"]
         except (json.JSONDecodeError, KeyError, TypeError):
-            return _ToolResult('Invalid arguments: expected JSON of the form {"sql": "SELECT ..."}.')
+            return _ToolResult(
+                'Invalid arguments: expected JSON of the form {"sql": "SELECT ..."}.'
+            )
 
         try:
             safe_sql = ensure_safe_select(sql)

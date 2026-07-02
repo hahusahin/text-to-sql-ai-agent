@@ -23,8 +23,8 @@ Create Date: 2026-07-01 17:14:46.639631
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = 'c4004287e324'
-down_revision = 'b3e6f1a9c72d'
+revision = "c4004287e324"
+down_revision = "b3e6f1a9c72d"
 branch_labels = None
 depends_on = None
 

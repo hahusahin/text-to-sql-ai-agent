@@ -70,9 +70,7 @@ def _row_contains(actual: Counter, expected: Counter) -> bool:
     return expected <= actual
 
 
-def results_match(
-    expected: list[Row], actual: list[Row], order_sensitive: bool
-) -> bool:
+def results_match(expected: list[Row], actual: list[Row], order_sensitive: bool) -> bool:
     """Return whether ``actual`` is the same answer as ``expected``.
 
     Row counts must match; then each expected row must be *contained in* an actual row

@@ -15,7 +15,7 @@ eval stays valid because it compares against reference SQL executed live.
 """
 
 import random
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 
 import psycopg2
 
@@ -32,7 +32,7 @@ WINDOW_DAYS = 365
 
 # Upper bound for any generated timestamp: a manufacturing event must not be
 # dated in the future. Recent work orders / downtime can otherwise land past now.
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 WORK_ORDER_COUNT = 1200
 DOWNTIME_EVENT_COUNT = 450
@@ -109,6 +109,7 @@ def _note_for(reason_code: str) -> str | None:
     if random.random() > NOTE_PROBABILITY:
         return None
     return random.choice(NOTE_TEMPLATES[reason_code])
+
 
 PRODUCTS: list[tuple[str, str]] = [
     ("Type C Contactor", "Contactors"),
@@ -260,9 +261,12 @@ def _split_count(total: int, parts: int) -> list[int]:
 def _timestamp_on(day: date, day_offset: int = 0) -> datetime:
     """A timezone-aware timestamp during working hours on ``day`` (+ offset days)."""
     base = datetime(
-        day.year, day.month, day.day,
-        random.randint(6, 20), random.randint(0, 59),
-        tzinfo=timezone.utc,
+        day.year,
+        day.month,
+        day.day,
+        random.randint(6, 20),
+        random.randint(0, 59),
+        tzinfo=UTC,
     )
     return min(base + timedelta(days=day_offset), NOW)
 
@@ -271,9 +275,12 @@ def _random_timestamp_within_window() -> datetime:
     """A timezone-aware timestamp at a random point in the last WINDOW_DAYS."""
     day = REFERENCE_DATE - timedelta(days=random.randint(0, WINDOW_DAYS - 1))
     ts = datetime(
-        day.year, day.month, day.day,
-        random.randint(0, 23), random.randint(0, 59),
-        tzinfo=timezone.utc,
+        day.year,
+        day.month,
+        day.day,
+        random.randint(0, 23),
+        random.randint(0, 59),
+        tzinfo=UTC,
     )
     return min(ts, NOW)
 
@@ -310,8 +317,14 @@ def seed_work_orders(
             "INSERT INTO work_orders "
             "(product_id, line_id, shift_id, planned_quantity, start_date, status) "
             "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;",
-            (s["product_id"], s["line_id"], s["shift_id"],
-             s["planned_quantity"], s["start_date"], s["status"]),
+            (
+                s["product_id"],
+                s["line_id"],
+                s["shift_id"],
+                s["planned_quantity"],
+                s["start_date"],
+                s["status"],
+            ),
         )
         work_orders.append(
             {
@@ -334,7 +347,9 @@ def seed_production_and_quality(cur, work_orders: list[dict]) -> tuple[int, int,
         if wo["status"] == "planned":
             continue  # nothing produced yet
 
-        fraction = random.uniform(0.85, 1.05) if wo["status"] == "completed" else random.uniform(0.3, 0.7)
+        fraction = (
+            random.uniform(0.85, 1.05) if wo["status"] == "completed" else random.uniform(0.3, 0.7)
+        )
         total_produced = max(1, round(wo["planned_quantity"] * fraction))
         last_recorded_at = None
         for day_offset, produced in enumerate(_split_count(total_produced, random.randint(1, 3))):
@@ -370,7 +385,9 @@ def seed_production_and_quality(cur, work_orders: list[dict]) -> tuple[int, int,
 
         if failed > 0:
             quantities = _split_count(failed, random.randint(1, 2))
-            for defect_type, quantity in zip(random.sample(DEFECT_TYPES, k=len(quantities)), quantities):
+            for defect_type, quantity in zip(
+                random.sample(DEFECT_TYPES, k=len(quantities)), quantities
+            ):
                 cur.execute(
                     "INSERT INTO defects (inspection_id, defect_type, severity, quantity) "
                     "VALUES (%s, %s, %s, %s);",
@@ -395,7 +412,9 @@ def seed_downtime_events(cur, machines_by_line: dict[int, list[int]], shift_ids:
     for _ in range(DOWNTIME_EVENT_COUNT):
         line_id = random.choice(line_ids)
         machines_on_line = machines_by_line[line_id]
-        machine_id = random.choice(machines_on_line) if machines_on_line and random.random() < 0.6 else None
+        machine_id = (
+            random.choice(machines_on_line) if machines_on_line and random.random() < 0.6 else None
+        )
         reason_code = random.choices(REASON_CODES, weights=REASON_WEIGHTS)[0]
         specs.append(
             {
@@ -416,8 +435,16 @@ def seed_downtime_events(cur, machines_by_line: dict[int, list[int]], shift_ids:
             "INSERT INTO downtime_events "
             "(line_id, machine_id, shift_id, reason_code, is_planned, duration_minutes, occurred_at, notes) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s);",
-            (s["line_id"], s["machine_id"], s["shift_id"], s["reason_code"],
-             s["is_planned"], s["duration_minutes"], s["occurred_at"], s["notes"]),
+            (
+                s["line_id"],
+                s["machine_id"],
+                s["shift_id"],
+                s["reason_code"],
+                s["is_planned"],
+                s["duration_minutes"],
+                s["occurred_at"],
+                s["notes"],
+            ),
         )
     return DOWNTIME_EVENT_COUNT
 
@@ -434,9 +461,7 @@ def main() -> None:
                 line_ids = seed_production_lines(cur)
                 machines_by_line = seed_machines(cur, line_ids)
                 shift_ids = seed_shifts(cur)
-                work_orders = seed_work_orders(
-                    cur, product_ids, list(line_ids.values()), shift_ids
-                )
+                work_orders = seed_work_orders(cur, product_ids, list(line_ids.values()), shift_ids)
                 output_count, inspection_count, defect_count = seed_production_and_quality(
                     cur, work_orders
                 )

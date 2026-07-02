@@ -64,7 +64,5 @@ class OpenAIClient:
         offline pipeline — only vectors from the same model are comparable. The
         agent calls this per question, so it's one short async embeddings request.
         """
-        response = await self._client.embeddings.create(
-            model=self._embedding_model, input=text
-        )
+        response = await self._client.embeddings.create(model=self._embedding_model, input=text)
         return response.data[0].embedding

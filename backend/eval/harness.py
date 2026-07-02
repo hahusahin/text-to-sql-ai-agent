@@ -167,6 +167,7 @@ async def _run(service: TextToSqlService, question: dict) -> Result:
 
 # --- Grading: pure functions over a Result (no I/O, free to recompute) ---
 
+
 def _executed(r: Result) -> bool:
     """A successful, data-backed query ran behind the answer."""
     return bool(r.sql) and r.error is None
@@ -285,13 +286,17 @@ async def run_eval() -> None:
     for r in results:
         if r.question["unanswerable"]:
             r.abstained = (
-                False if r.error else await _judge_abstained(
+                False
+                if r.error
+                else await _judge_abstained(
                     judge, settings.openai_model, r.question["question"], r.answer
                 )
             )
         elif _is_hybrid(r.question):
             r.hybrid_correct = (
-                False if r.error else await _judge_hybrid(
+                False
+                if r.error
+                else await _judge_hybrid(
                     judge,
                     settings.openai_model,
                     r.question["question"],

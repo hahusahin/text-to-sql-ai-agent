@@ -23,6 +23,8 @@ migrate = "alembic upgrade head"
 downgrade = "alembic downgrade -1"
 eval = "python -m eval.harness"
 eval-regrade = "python -m eval.harness --regrade"
+lint = "ruff check ."
+format = "ruff format ."
 
 # Run migrations against PRODUCTION (Supabase), opt-in only. Overrides
 # DATABASE_URL from PROD_DATABASE_URL for this task alone, so `migrate`/`seed`
@@ -58,5 +60,19 @@ env = { DATABASE_URL = "${PROD_DATABASE_URL}" }
 dev = [
     "poethepoet (>=0.46.0,<0.47.0)",
     "alembic (>=1.18.5,<2.0.0)",
-    "psycopg2-binary (>=2.9.12,<3.0.0)"
+    "psycopg2-binary (>=2.9.12,<3.0.0)",
+    "ruff (>=0.14.0,<0.15.0)"
 ]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+# E = pycodestyle errors, F = pyflakes (undefined names, unused imports —
+# catches real bugs), I = isort (import ordering), UP = pyupgrade (modern syntax).
+select = ["E", "F", "I", "UP"]
+# E501 (line-too-long) is handled by `ruff format`, which wraps all breakable
+# code to line-length. Left on, E501 only fires on things the formatter can't
+# split (long string literals, URLs) — noise we'd only silence with noqa anyway.
+ignore = ["E501"]

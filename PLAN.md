@@ -197,10 +197,21 @@ Vector store = **pgvector in the same Postgres** (Supabase ships it — no separ
 
 Goal: light hardening + visibility. Document more than gold-plate. (NOT a dashboard, NOT SSE streaming.)
 
-- [ ] **3.1** Observability/tracing: structured logging of each agent step (tool calls, SQL, latency, token use). 🎓 design: what to log in an agent.
-- [ ] **3.2** GitHub Actions CI: run tests + lint + eval on push (CD already wired: Vercel auto-deploys; HF Spaces deploys from its Space repo). 🎓 design: CI before auto-deploy.
-- [ ] **3.3** Backend tests + linter/formatter config wired into CI.
-- [ ] **3.4** (Optional) Surface the agent's intermediate steps in the UI ("inspecting schema… running query… fixing query…"). 🎓 agent: why this beats token streaming in an agent flow.
-- [ ] **3.5** (Optional) Model routing: cheap model default, escalate hard questions. 🎓 design: cost vs capability.
-- [ ] **3.6** Final README/docs polish: architecture diagram, eval numbers, security notes, cost notes.
+Decisions: **no eval in CI** (costs OpenAI credits + needs a live DB — stays local via `poe eval`);
+**no backend unit tests** — instead a Python "build check" (ruff + `python -c "import app.main"` import
+smoke test, the closest analogue to `npm run build` failing); **HF Spaces does NOT auto-deploy** — CD is a
+GitHub Action that pushes the `backend/` subtree to the `hf` remote.
+
+### 3.1 — CI/CD
+
+- [x] **3.1.1** Ruff tooling (linter + formatter, = eslint + prettier in one): `ruff` dev dep + `[tool.ruff]` config + `poe lint`/`poe format` tasks; `.vscode/settings.json` sets Ruff as the Python formatter (format-on-save **off**, manual Shift+Alt+F). Fix what it flags. 🎓 tooling: linter vs formatter.
+- [ ] **3.1.2** GitHub Actions **CI** workflow (`.github/workflows/ci.yml`): on push/PR run `ruff check` + import smoke test (dummy env). The deploy gate. 🎓 design: CI as the health check before ship.
+- [ ] **3.1.3** GitHub Actions **CD** workflow: deploy `backend/` subtree to the HF Space (`git subtree split` → force-push to `hf`), gated on CI green (`needs:`). Needs `HF_TOKEN` GitHub secret. 🎓 deploy: why HF needs an explicit push.
+
+### 3.2+ — Observability & extras
+
+- [ ] **3.2** Observability/tracing: structured logging of each agent step (tool calls, SQL, latency, token use). 🎓 design: what to log in an agent.
+- [ ] **3.3** (Optional) Surface the agent's intermediate steps in the UI ("inspecting schema… running query… fixing query…"). 🎓 agent: why this beats token streaming in an agent flow.
+- [ ] **3.4** (Optional) Model routing: cheap model default, escalate hard questions. 🎓 design: cost vs capability.
+- [ ] **3.5** Final README/docs polish: architecture diagram, eval numbers, security notes, cost notes.
 ```

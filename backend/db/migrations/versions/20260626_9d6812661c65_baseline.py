@@ -1,14 +1,12 @@
 """baseline
 
 Revision ID: 9d6812661c65
-Revises: 
+Revises:
 Create Date: 2026-06-26 10:41:52.990683
 """
 
-from alembic import op
-
 # revision identifiers, used by Alembic.
-revision = '9d6812661c65'
+revision = "9d6812661c65"
 down_revision = None
 branch_labels = None
 depends_on = None

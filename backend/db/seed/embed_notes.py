@@ -22,8 +22,8 @@ the embedding as that literal string via a normal parameter — no extra adapter
 or numpy dependency needed.
 """
 
-from openai import OpenAI
 import psycopg2
+from openai import OpenAI
 
 from app.core.config import get_settings
 
@@ -68,9 +68,7 @@ def main() -> None:
         total = 0
         for start in range(0, len(rows), BATCH_SIZE):
             batch = rows[start : start + BATCH_SIZE]
-            vectors = _embed(
-                client, settings.openai_embedding_model, [notes for _, notes in batch]
-            )
+            vectors = _embed(client, settings.openai_embedding_model, [notes for _, notes in batch])
             with conn.cursor() as cur:
                 cur.executemany(
                     "UPDATE downtime_events SET embedding = %s WHERE id = %s;",

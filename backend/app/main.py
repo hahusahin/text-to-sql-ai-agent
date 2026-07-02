@@ -7,8 +7,8 @@ graph (DB pool -> repository, OpenAI client, service), and stashes the service o
 below this file just receives what it needs — no module reaches for global config.
 """
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse

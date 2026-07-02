@@ -98,9 +98,7 @@ class SqlRepository(Protocol):
         """Introspect the live database and return its schema as LLM-readable text."""
         ...
 
-    async def search_notes(
-        self, embedding: list[float], limit: int
-    ) -> list[dict[str, Any]]:
+    async def search_notes(self, embedding: list[float], limit: int) -> list[dict[str, Any]]:
         """Return the downtime events whose note is most similar to ``embedding``.
 
         ``embedding`` is the query vector; rows come back nearest-first by cosine
@@ -155,9 +153,7 @@ class AsyncpgRepository(SqlRepository):
             raise QueryExecutionError(str(exc)) from exc
         return [dict(record) for record in records]
 
-    async def search_notes(
-        self, embedding: list[float], limit: int
-    ) -> list[dict[str, Any]]:
+    async def search_notes(self, embedding: list[float], limit: int) -> list[dict[str, Any]]:
         try:
             async with self._pool.acquire() as connection:
                 records = await connection.fetch(
