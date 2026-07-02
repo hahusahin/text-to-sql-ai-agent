@@ -10,24 +10,7 @@ answers in plain language.
 
 ## What it does
 
-You ask something like _"Which production line had the most unplanned downtime last month?"_. Instead of
-one-shot SQL, the model works **agentically** with three tools:
-
-- `get_schema()` — inspect the live tables and columns
-- `run_query(sql)` — execute a read-only `SELECT`
-- `search_notes(query)` — semantic (vector) search over the free-text downtime notes, for questions the
-  structured columns can't express (e.g. _"which lines had oil leaks?"_ — the notes say "hydraulic
-  seepage", never the literal words)
-
-It runs a loop: call a tool → read the result _or the database error_ → correct itself → answer. Seeing
-the real error (e.g. `column "duration" does not exist`) is exactly what lets it fix a bad query and
-retry. For questions that need both, it combines them — semantic search finds the relevant events, then
-a `SELECT` aggregates them exactly. Each answer ships with the SQL that produced it and the result rows,
-so you can verify the answer came from real data.
-
-On the backend, every step of the loop is emitted as a **structured JSON log line** — each tool call, the
-SQL it ran, per-step latency and token usage, all tied together by a per-request id — so a slow, costly,
-or self-correcting run can be traced instead of guessed at.
+![How the agent works: a user question (TR/EN) goes through the Next.js gateway to the FastAPI service, where gpt-5.4-mini runs a tool-calling loop — get_schema(), run_query(sql) and search_notes(query) against PostgreSQL + pgvector — reading each result or database error and self-correcting up to six steps, then returns a plain-language answer with the exact SQL and result rows. Every step is logged as one structured JSON line, and read-only DB access plus single-SELECT validation, a forced LIMIT and a statement timeout keep the database safe.](docs/agent-flow.svg)
 
 ## The data — a manufacturing factory
 
