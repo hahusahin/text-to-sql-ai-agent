@@ -22,6 +22,8 @@ tool-calling mechanism stays explicit and framework-free.
 """
 
 import json
+import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,6 +32,8 @@ from app.llm.client import OpenAIClient
 from app.llm.tools import TOOLS
 from app.models.chat import ChatResponse, Turn
 from app.repositories.sql_repository import QueryExecutionError, SqlRepository
+
+log = logging.getLogger(__name__)
 
 # Each pass of the loop is one model turn (one Responses call). A normal run is
 # short: get_schema, run_query, answer — with a turn or two of slack for the model
@@ -52,11 +56,19 @@ class _ToolResult:
     error sentence). ``sql`` and ``rows`` are set **only** when a ``run_query`` call
     succeeded, so the loop can capture the query behind the answer as proof — a
     failed query has nothing to show and leaves them ``None``.
+
+    ``ok`` and ``attempted_sql`` exist purely for observability logging, not for the
+    answer: ``ok`` records whether the tool succeeded, and ``attempted_sql`` keeps the
+    SQL the model tried *even when it failed* (``sql`` above is success-only), so the
+    logs can show the model's failed attempts and self-correction, not just the query
+    that finally worked.
     """
 
     output: str
     sql: str | None = None
     rows: list[dict[str, Any]] | None = None
+    ok: bool = True
+    attempted_sql: str | None = None
 
 
 _AGENT_INSTRUCTIONS = """You are a data analyst answering questions about a manufacturing factory's PostgreSQL database. Answer using ONLY data you read from that database, by using the tools you are given.
@@ -102,7 +114,8 @@ class TextToSqlService:
         last_sql = ""
         last_rows: list[dict[str, Any]] = []
 
-        for _ in range(_MAX_STEPS):
+        for step in range(1, _MAX_STEPS + 1):
+            started = time.perf_counter()
             response = await self._llm.respond(
                 instructions=_AGENT_INSTRUCTIONS,
                 input_items=conversation,
@@ -110,6 +123,18 @@ class TextToSqlService:
             )
 
             tool_calls = [item for item in response.output if item.type == "function_call"]
+            usage = response.usage
+            log.info(
+                "llm_call",
+                extra={
+                    "step": step,
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "input_tokens": usage.input_tokens if usage else None,
+                    "output_tokens": usage.output_tokens if usage else None,
+                    "total_tokens": usage.total_tokens if usage else None,
+                    "tool_calls": len(tool_calls),
+                },
+            )
             if not tool_calls:
                 # No tool requested -> the model is done; surface its answer plus the
                 # last query that actually returned rows (the proof behind it).
@@ -117,7 +142,18 @@ class TextToSqlService:
 
             conversation += response.output
             for call in tool_calls:
+                started = time.perf_counter()
                 result = await self._run_tool(call.name, call.arguments)
+                log.info(
+                    "tool_call",
+                    extra={
+                        "step": step,
+                        "tool": call.name,
+                        "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                        "ok": result.ok,
+                        **({"sql": result.attempted_sql} if result.attempted_sql else {}),
+                    },
+                )
                 if result.sql is not None:
                     last_sql, last_rows = result.sql, result.rows or []
                 conversation.append(
@@ -151,28 +187,33 @@ class TextToSqlService:
             return await self._run_query_tool(arguments)
         if name == "search_notes":
             return await self._run_search_notes_tool(arguments)
-        return _ToolResult(output=f"Unknown tool: {name!r}.")
+        return _ToolResult(output=f"Unknown tool: {name!r}.", ok=False)
 
     async def _run_query_tool(self, arguments: str) -> _ToolResult:
         try:
             sql = json.loads(arguments)["sql"]
         except (json.JSONDecodeError, KeyError, TypeError):
             return _ToolResult(
-                'Invalid arguments: expected JSON of the form {"sql": "SELECT ..."}.'
+                'Invalid arguments: expected JSON of the form {"sql": "SELECT ..."}.',
+                ok=False,
             )
 
         try:
             safe_sql = ensure_safe_select(sql)
         except UnsafeSqlError as exc:
-            return _ToolResult(f"Query rejected by the safety check: {exc.reason}")
+            return _ToolResult(
+                f"Query rejected by the safety check: {exc.reason}",
+                ok=False,
+                attempted_sql=sql,
+            )
 
         try:
             rows = await self._repository.run_query(safe_sql)
         except QueryExecutionError as exc:
-            return _ToolResult(f"Database error: {exc}")
+            return _ToolResult(f"Database error: {exc}", ok=False, attempted_sql=safe_sql)
 
         output = json.dumps(rows, default=str, ensure_ascii=False)
-        return _ToolResult(output=output, sql=safe_sql, rows=rows)
+        return _ToolResult(output=output, sql=safe_sql, rows=rows, attempted_sql=safe_sql)
 
     async def _run_search_notes_tool(self, arguments: str) -> _ToolResult:
         """Embed the model's query and return the nearest downtime notes as JSON.
@@ -184,12 +225,14 @@ class TextToSqlService:
         try:
             query = json.loads(arguments)["query"]
         except (json.JSONDecodeError, KeyError, TypeError):
-            return _ToolResult('Invalid arguments: expected JSON of the form {"query": "..."}.')
+            return _ToolResult(
+                'Invalid arguments: expected JSON of the form {"query": "..."}.', ok=False
+            )
 
         try:
             embedding = await self._llm.embed_query(query)
             rows = await self._repository.search_notes(embedding, _NOTES_SEARCH_LIMIT)
         except QueryExecutionError as exc:
-            return _ToolResult(f"Database error: {exc}")
+            return _ToolResult(f"Database error: {exc}", ok=False)
 
         return _ToolResult(output=json.dumps(rows, default=str, ensure_ascii=False))
