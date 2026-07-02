@@ -1,0 +1,80 @@
+name: ci-cd
+
+# One CI/CD pipeline. CI (the `backend` job) runs on every push and PR: lint,
+# verify formatting, and prove the app still imports (our Python "build check").
+# CD (the `deploy` job) runs only on push to master and `needs:` CI to pass
+# first — a red CI blocks the deploy. Hugging Face does not auto-deploy from a
+# GitHub push, so CD explicitly pushes the backend/ subtree to the HF Space.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # The Poetry project lives in backend/, so all steps run from there.
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Poetry
+        # pipx is preinstalled on GitHub runners; this puts `poetry` on PATH.
+        run: pipx install poetry
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          # Cache the Poetry-managed virtualenv keyed off poetry.lock.
+          cache: poetry
+          cache-dependency-path: backend/poetry.lock
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Lint (ruff check)
+        run: poetry run ruff check .
+
+      - name: Formatting (ruff format --check)
+        run: poetry run ruff format --check .
+
+      - name: Build check (import smoke test)
+        # Python has no compile step; importing the app proves it loads without
+        # syntax/import errors — the analogue of `npm run build` failing. Dummy
+        # env satisfies the required Settings fields; nothing actually connects.
+        env:
+          DATABASE_URL_READONLY: "postgresql://x:x@localhost/x"
+          API_KEY: "ci-dummy"
+          OPENAI_API_KEY: "ci-dummy"
+        run: poetry run python -c "import app.main; print('import OK')"
+
+  deploy:
+    # Gate: only after CI (backend) is green, and only on a real push to master
+    # — never on pull requests. This is what enforces "CI passes, then ship".
+    needs: backend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git subtree split walks the whole history, so we need it all (the
+          # default shallow clone would break the split).
+          fetch-depth: 0
+
+      - name: Deploy backend/ to the Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        # The HF Space is built from the backend/ folder, but its own git repo
+        # expects that folder AT its root. `git subtree split` synthesizes a
+        # commit whose tree is exactly backend/'s contents; we force-push that
+        # commit to the Space's main branch. Force because the Space history is
+        # a deploy mirror, not something we merge into.
+        run: |
+          subtree_sha=$(git subtree split --prefix backend)
+          git push --force \
+            "https://hahusahin:${HF_TOKEN}@huggingface.co/spaces/hahusahin/text-to-sql-ai-service" \
+            "${subtree_sha}:refs/heads/main"

@@ -206,7 +206,7 @@ GitHub Action that pushes the `backend/` subtree to the `hf` remote.
 
 - [x] **3.1.1** Ruff tooling (linter + formatter, = eslint + prettier in one): `ruff` dev dep + `[tool.ruff]` config + `poe lint`/`poe format` tasks; `.vscode/settings.json` sets Ruff as the Python formatter (format-on-save **off**, manual Shift+Alt+F). Fix what it flags. 🎓 tooling: linter vs formatter.
 - [x] **3.1.2** GitHub Actions **CI** workflow (`.github/workflows/ci.yml`): on push/PR run `ruff check` + import smoke test (dummy env). The deploy gate. 🎓 design: CI as the health check before ship.
-- [ ] **3.1.3** GitHub Actions **CD** workflow: deploy `backend/` subtree to the HF Space (`git subtree split` → force-push to `hf`), gated on CI green (`needs:`). Needs `HF_TOKEN` GitHub secret. 🎓 deploy: why HF needs an explicit push.
+- [x] **3.1.3** GitHub Actions **CD** workflow: deploy `backend/` subtree to the HF Space (`git subtree split` → force-push to `hf`), gated on CI green (`needs:`). Needs `HF_TOKEN` GitHub secret. 🎓 deploy: why HF needs an explicit push.
 
 ### 3.2+ — Observability & extras
 
