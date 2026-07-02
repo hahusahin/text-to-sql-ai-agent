@@ -7,6 +7,7 @@ graph (DB pool -> repository, OpenAI client, service), and stashes the service o
 below this file just receives what it needs — no module reaches for global config.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -14,6 +15,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging
 from app.core.security import require_api_key
 from app.core.sql_guard import UnsafeSqlError
 from app.llm.client import OpenAIClient
@@ -21,9 +23,12 @@ from app.repositories.sql_repository import AsyncpgRepository
 from app.routes import chat
 from app.services.text_to_sql import TextToSqlService
 
+log = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
     settings = get_settings()
     repository = await AsyncpgRepository.create(
         settings.database_url_readonly,
@@ -35,6 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         embedding_model=settings.openai_embedding_model,
     )
     app.state.text_to_sql = TextToSqlService(llm=llm, repository=repository)
+    log.info("service_started", extra={"model": settings.openai_model})
     try:
         yield
     finally:

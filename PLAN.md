@@ -208,9 +208,14 @@ GitHub Action that pushes the `backend/` subtree to the `hf` remote.
 - [x] **3.1.2** GitHub Actions **CI** workflow (`.github/workflows/ci.yml`): on push/PR run `ruff check` + import smoke test (dummy env). The deploy gate. 🎓 design: CI as the health check before ship.
 - [x] **3.1.3** GitHub Actions **CD** workflow: deploy `backend/` subtree to the HF Space (`git subtree split` → force-push to `hf`), gated on CI green (`needs:`). Needs `HF_TOKEN` GitHub secret. 🎓 deploy: why HF needs an explicit push.
 
-### 3.2+ — Observability & extras
+### 3.2 — Observability
 
-- [ ] **3.2** Observability/tracing: structured logging of each agent step (tool calls, SQL, latency, token use). 🎓 design: what to log in an agent.
+- [x] **3.2.1** JSON-lines logger foundation: `core/logging.py` (`JsonFormatter` over stdlib `logging` + `configure_logging()`), wired at startup on the `app` logger tree. 🎓 design: logging as a cross-cutting concern (global, not an injected service); 🎓 tooling: Python `logging` chain, why JSON to stdout.
+- [ ] **3.2.2** Instrument the agent loop: per-step lines for each `llm_call` (latency + tokens from `response.usage`) and `tool_call` (tool, SQL, latency). 🎓 design: what to log in an agent.
+- [ ] **3.2.3** Request-scoped correlation id (`contextvars`) shared by every line, plus a final `answer` summary line (total steps/tokens/latency). 🎓 tooling: `contextvars` for request-scoped context.
+
+### 3.3+ — Extras
+
 - [ ] **3.3** (Optional) Surface the agent's intermediate steps in the UI ("inspecting schema… running query… fixing query…"). 🎓 agent: why this beats token streaming in an agent flow.
 - [ ] **3.4** (Optional) Model routing: cheap model default, escalate hard questions. 🎓 design: cost vs capability.
 - [ ] **3.5** Final README/docs polish: architecture diagram, eval numbers, security notes, cost notes.
