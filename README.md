@@ -25,6 +25,10 @@ retry. For questions that need both, it combines them — semantic search finds 
 a `SELECT` aggregates them exactly. Each answer ships with the SQL that produced it and the result rows,
 so you can verify the answer came from real data.
 
+On the backend, every step of the loop is emitted as a **structured JSON log line** — each tool call, the
+SQL it ran, per-step latency and token usage, all tied together by a per-request id — so a slow, costly,
+or self-correcting run can be traced instead of guessed at.
+
 ## The data — a manufacturing factory
 
 The database models a **discrete-manufacturing** factory making industrial electrical / electromechanical
