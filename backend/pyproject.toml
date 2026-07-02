@@ -34,6 +34,26 @@ sequence = [
 ]
 env = { DATABASE_URL = "${PROD_DATABASE_URL}" }
 
+# Re-seed PRODUCTION (Supabase). DESTRUCTIVE: the seed wipes and regenerates every
+# table, so this replaces all prod data. Needed once to populate the free-text notes
+# added after prod was first seeded. Same env override as migrate-prod; the banner
+# pauses 5s so a mistaken run can be aborted.
+[tool.poe.tasks.seed-prod]
+sequence = [
+  { cmd = "python -c \"import os,time,urllib.parse as u; print('>>> SEED will WIPE and regenerate ALL data on PRODUCTION:', u.urlparse(os.environ['DATABASE_URL']).hostname); print('>>> Ctrl+C within 5s to abort.'); time.sleep(5)\"" },
+  { cmd = "python -m db.seed.seed" },
+]
+env = { DATABASE_URL = "${PROD_DATABASE_URL}" }
+
+# Embed the downtime notes on PRODUCTION. Idempotent (only rows missing an embedding
+# are processed), so it's safe to re-run. Run after migrate-prod + seed-prod.
+[tool.poe.tasks.embed-prod]
+sequence = [
+  { cmd = "python -c \"import os,urllib.parse as u; print('>>> Embedding notes on PRODUCTION:', u.urlparse(os.environ['DATABASE_URL']).hostname, '- Ctrl+C now to abort.')\"" },
+  { cmd = "python -m db.seed.embed_notes" },
+]
+env = { DATABASE_URL = "${PROD_DATABASE_URL}" }
+
 [dependency-groups]
 dev = [
     "poethepoet (>=0.46.0,<0.47.0)",
