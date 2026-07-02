@@ -60,6 +60,7 @@ Sample questions it can answer:
 | Database | PostgreSQL + **pgvector** — Docker locally, Supabase in production                              |
 | Tooling  | Poetry, asyncpg, Alembic (raw-SQL migrations, no ORM)                                          |
 | Deploy   | Vercel (frontend) · Hugging Face Spaces (backend, Docker) · Supabase (Postgres)                |
+| CI/CD    | GitHub Actions — `ruff` lint/format + import build-check gate a deploy of `backend/` to HF Spaces |
 
 ## Guardrails
 
