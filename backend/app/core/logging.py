@@ -18,8 +18,25 @@ structured fields via ``extra=``::
 import json
 import logging
 import sys
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
+
+# The id shared by every log line of one agent run. A ContextVar (not a plain global
+# or threading.local) because the service handles many questions concurrently on the
+# same thread: asyncio gives each task its own copy of the context, so one request's
+# id never leaks into another's log lines. Code deep in the loop never passes it
+# around — the logging filter below reads it ambiently at write time.
+_request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
+
+
+def new_request_id() -> str:
+    """Mint a short id for the current agent run and bind it to this context."""
+    request_id = uuid4().hex[:8]
+    _request_id.set(request_id)
+    return request_id
+
 
 # The attribute names the standard library puts on every LogRecord. We build the set
 # from a throwaway record so it tracks the running Python version instead of being a
@@ -30,6 +47,21 @@ _STANDARD_ATTRS = frozenset(vars(logging.makeLogRecord({}))) | {
     "asctime",
     "taskName",
 }
+
+
+class _RequestIdFilter(logging.Filter):
+    """Attach the current context's request id to every record, when one is set.
+
+    A filter, not formatter code, so the formatter stays generic (it just serializes
+    whatever fields a record carries). Records logged outside any request (e.g. at
+    startup) have no id, so we leave the field off rather than writing ``null``.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        request_id = _request_id.get()
+        if request_id is not None:
+            record.request_id = request_id
+        return True
 
 
 class JsonFormatter(logging.Formatter):
@@ -66,6 +98,7 @@ def configure_logging(level: int = logging.INFO) -> None:
     """
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
+    handler.addFilter(_RequestIdFilter())
 
     app_logger = logging.getLogger("app")
     app_logger.handlers.clear()

@@ -27,6 +27,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from app.core.logging import new_request_id
 from app.core.sql_guard import UnsafeSqlError, ensure_safe_select
 from app.llm.client import OpenAIClient
 from app.llm.tools import TOOLS
@@ -114,6 +115,21 @@ class TextToSqlService:
         last_sql = ""
         last_rows: list[dict[str, Any]] = []
 
+        new_request_id()
+        started_at = time.perf_counter()
+        total_tokens = 0
+
+        def finish(answer: str, steps: int) -> ChatResponse:
+            log.info(
+                "answer",
+                extra={
+                    "steps": steps,
+                    "total_tokens": total_tokens,
+                    "duration_ms": round((time.perf_counter() - started_at) * 1000, 1),
+                },
+            )
+            return ChatResponse(answer=answer, sql=last_sql, rows=last_rows)
+
         for step in range(1, _MAX_STEPS + 1):
             started = time.perf_counter()
             response = await self._llm.respond(
@@ -124,6 +140,7 @@ class TextToSqlService:
 
             tool_calls = [item for item in response.output if item.type == "function_call"]
             usage = response.usage
+            total_tokens += usage.total_tokens if usage else 0
             log.info(
                 "llm_call",
                 extra={
@@ -138,7 +155,7 @@ class TextToSqlService:
             if not tool_calls:
                 # No tool requested -> the model is done; surface its answer plus the
                 # last query that actually returned rows (the proof behind it).
-                return ChatResponse(answer=response.output_text, sql=last_sql, rows=last_rows)
+                return finish(response.output_text, step)
 
             conversation += response.output
             for call in tool_calls:
@@ -164,13 +181,10 @@ class TextToSqlService:
                     }
                 )
 
-        return ChatResponse(
-            answer=(
-                "I couldn't work out an answer within the allowed number of steps. "
-                "Please try rephrasing the question."
-            ),
-            sql=last_sql,
-            rows=last_rows,
+        return finish(
+            "I couldn't work out an answer within the allowed number of steps. "
+            "Please try rephrasing the question.",
+            _MAX_STEPS,
         )
 
     async def _run_tool(self, name: str, arguments: str) -> _ToolResult:

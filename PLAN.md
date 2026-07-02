@@ -212,7 +212,7 @@ GitHub Action that pushes the `backend/` subtree to the `hf` remote.
 
 - [x] **3.2.1** JSON-lines logger foundation: `core/logging.py` (`JsonFormatter` over stdlib `logging` + `configure_logging()`), wired at startup on the `app` logger tree. 🎓 design: logging as a cross-cutting concern (global, not an injected service); 🎓 tooling: Python `logging` chain, why JSON to stdout.
 - [x] **3.2.2** Instrument the agent loop: per-step lines for each `llm_call` (latency + tokens from `response.usage`) and `tool_call` (tool, SQL, latency). 🎓 design: what to log in an agent.
-- [ ] **3.2.3** Request-scoped correlation id (`contextvars`) shared by every line, plus a final `answer` summary line (total steps/tokens/latency). 🎓 tooling: `contextvars` for request-scoped context.
+- [x] **3.2.3** Request-scoped correlation id (`contextvars`) shared by every line, plus a final `answer` summary line (total steps/tokens/latency). 🎓 tooling: `contextvars` for request-scoped context.
 
 ### 3.3+ — Extras
 
