@@ -2,13 +2,14 @@
 
 **Live demo → [text-to-sql-ai-agent-pi.vercel.app](https://text-to-sql-ai-agent-pi.vercel.app)**
 
-An **agentic text-to-SQL assistant** over a manufacturing database with **hybrid retrieval** — it
-combines SQL over the structured tables with **semantic search** over free-text operator notes. Ask a
-plain-language question (Turkish or English) and an LLM inspects the schema, writes SQL, runs it
-**read-only**, searches the notes by meaning when a question needs it, fixes its own query on error, and
-answers in plain language.
+An **agentic text-to-SQL assistant** over a manufacturing database: ask a plain-language question and it answers from real data — combining SQL over the structured tables with
+**semantic search** over free-text operator notes (**hybrid retrieval**).
 
 ## What it does
+
+A question flows through a thin gateway to the agent, which loops over three tools — inspect the schema,
+run SQL, search the notes — self-correcting on database errors, then answers in plain language and shows
+the exact SQL it ran.
 
 ![How the agent works: a user question (TR/EN) goes through the Next.js gateway to the FastAPI service, where gpt-5.4-mini runs a tool-calling loop — get_schema(), run_query(sql) and search_notes(query) against PostgreSQL + pgvector — reading each result or database error and self-correcting up to six steps, then returns a plain-language answer with the exact SQL and result rows. Every step is logged as one structured JSON line, and read-only DB access plus single-SELECT validation, a forced LIMIT and a statement timeout keep the database safe.](docs/agent-flow.svg)
 
@@ -65,37 +66,22 @@ the database protected:
 
 A model can emit SQL that _runs fine but returns the wrong number_, so the agent is graded on
 **execution accuracy** — run the generated query and compare its **result** to a known-correct one, not
-its text (there are endless correct ways to write the same query). A reproducible harness runs 20
-tiered questions (easy → very-hard, plus **hybrid** questions that need semantic search and off-topic
-ones the agent must **decline**) through the real agent against the local database, and also checks
-whether the SQL ran, hit the right tables, and — via an **LLM-as-judge** — whether it abstained on the
-unanswerable ones and whether its hybrid answers are correct (those have no single exact result to
-match, so a rubric judge scores them).
+its text (there are endless correct ways to write the same query). A reproducible harness runs 20 tiered
+questions (plus hybrid ones that need semantic search and off-topic ones the agent must decline) through
+the real agent.
 
-Baseline (`gpt-5.4-mini`): **execution accuracy 13/14** (window-function and correlated-subquery
-questions pass; the one miss is a genuine three-way tie in the data), **hybrid 2/3** (LLM-judged), and
-**abstention 2/3** — the agent occasionally forces an off-topic question onto the schema instead of
-declining. Details in **[backend/eval/README.md](backend/eval/README.md)**.
+Baseline (`gpt-5.4-mini`): **execution accuracy 13/14**. Full breakdown in
+**[backend/eval/README.md](backend/eval/README.md)**.
 
-## Run locally
+## Limitations & scaling
 
-Postgres runs in Docker; the apps run on the host for fast hot-reload.
+Deliberate trade-offs for a portfolio demo, and where they'd change in production:
 
-```bash
-# 1. Database (from repo root)
-docker compose up -d
-
-# 2. Backend — FastAPI on http://localhost:8000 (from backend/)
-poetry install
-poetry run alembic upgrade head   # create tables + pgvector + read-only role
-poetry run poe seed               # generate ~12 months of data
-poetry run poe embed              # embed the downtime notes for semantic search
-poetry run uvicorn app.main:app --reload
-
-# 3. Frontend — Next.js on http://localhost:3000 (from frontend/)
-npm install
-npm run dev
-```
-
-Copy `backend/.env.example` → `backend/.env` and `frontend/.env.local.example` → `frontend/.env.local`
-and fill in the values (database URLs, OpenAI key, shared API key).
+- **The model is probabilistic** — generated SQL can run yet be subtly wrong (a bad JOIN, a wrong date
+  boundary). Execution-accuracy eval is the guard, but it covers a fixed question set, not everything.
+- **The whole schema fits in the prompt** — fine at eight tables; at thousands you'd retrieve only the
+  relevant tables (embeddings + the foreign-key graph) or point the agent at a curated view layer.
+- **Access is all-or-nothing** — a read-only role plus one shared API key; no per-user auth or
+  row-level security (out of scope by design).
+- **Agentic cost/latency** — each question is several LLM round-trips, so it's costlier and slower than
+  a single-shot query; caching or model routing would help at volume.
