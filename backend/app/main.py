@@ -19,7 +19,11 @@ from app.core.logging import configure_logging
 from app.core.security import require_api_key
 from app.core.sql_guard import UnsafeSqlError
 from app.llm.client import OpenAIClient
-from app.repositories.sql_repository import AsyncpgRepository
+from app.repositories.sql_repository import (
+    AsyncpgRepository,
+    QueryExecutionError,
+    SqlRepository,
+)
 from app.routes import chat
 from app.services.text_to_sql import TextToSqlService
 
@@ -39,6 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         model=settings.openai_model,
         embedding_model=settings.openai_embedding_model,
     )
+    app.state.repository = repository
     app.state.text_to_sql = TextToSqlService(llm=llm, repository=repository)
     log.info("service_started", extra={"model": settings.openai_model})
     try:
@@ -65,3 +70,23 @@ async def unsafe_sql_handler(request: Request, exc: UnsafeSqlError) -> JSONRespo
 async def health() -> dict[str, str]:
     """Liveness probe: confirms the service is up."""
     return {"status": "ok"}
+
+
+@app.get("/health/db")
+async def health_db(request: Request) -> JSONResponse:
+    """Readiness probe: confirms the service can actually reach the database.
+
+    Doubles as the Supabase keep-alive target. The free tier pauses a project
+    after ~7 days without database activity, and ``/health`` never touches the DB
+    — so the scheduled ping has to land here for Postgres to see any traffic.
+    """
+    repository: SqlRepository = request.app.state.repository
+    try:
+        await repository.ping()
+    except QueryExecutionError as exc:
+        log.warning("health_db_unreachable", extra={"error": str(exc)})
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "database": "unreachable"},
+        )
+    return JSONResponse(content={"status": "ok", "database": "ok"})

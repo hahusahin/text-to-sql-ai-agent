@@ -86,6 +86,14 @@ class SqlRepository(Protocol):
     depend on this interface, not on asyncpg directly.
     """
 
+    async def ping(self) -> None:
+        """Confirm the database is reachable.
+
+        Returns nothing on success; raises :class:`QueryExecutionError` if the
+        database cannot be reached or refuses the query.
+        """
+        ...
+
     async def run_query(self, sql: str) -> list[dict[str, Any]]:
         """Execute a read-only query and return its rows as dictionaries.
 
@@ -144,6 +152,16 @@ class AsyncpgRepository(SqlRepository):
     async def close(self) -> None:
         """Close the pool and all its connections (call on app shutdown)."""
         await self._pool.close()
+
+    async def ping(self) -> None:
+        # A dead server surfaces as an OSError (TCP refused) or a pool-acquire
+        # timeout, neither of which is a PostgresError — so all three are folded
+        # into the same domain error the caller already knows how to handle.
+        try:
+            async with self._pool.acquire() as connection:
+                await connection.execute("SELECT 1")
+        except (asyncpg.PostgresError, OSError, TimeoutError) as exc:
+            raise QueryExecutionError(str(exc) or exc.__class__.__name__) from exc
 
     async def run_query(self, sql: str) -> list[dict[str, Any]]:
         try:
