@@ -9,6 +9,13 @@ name: keep-alive
 # SELECT against Postgres, which is the traffic Supabase actually counts.
 # Pinging plain /health would keep the Space warm but leave the database idle.
 # Vercel is serverless and never sleeps, so the frontend needs nothing.
+#
+# Caveat this workflow cannot fix by itself: GitHub disables a scheduled
+# workflow after 60 days without *repository activity*. The counter tracks
+# pushes, not workflow runs, so these daily green runs do not reset it -- a
+# repo left untouched for 60 days loses its cron even while the cron is
+# working. Any push to master resets the clock; if it does get disabled, the
+# file stays and `gh workflow enable keep-alive.yml` brings it back.
 
 on:
   schedule:
